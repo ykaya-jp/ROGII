@@ -159,23 +159,53 @@ KALMAN_PHI_CLIP      = 0.99999  # numerical guard so 1 - phi^2 > 0
 KALMAN_SIGMA_FLOOR   = 1e-4  # MLE sigma floor to avoid degenerate variance
 KALMAN_STD_FLOOR_FRAC = 0.1  # std_pred clipped to >= sigma * this fraction
 
-# ─── 自前 base hyperparameter (= 4 own base for 9-base Ridge stack) ─────────
+# ─── 自前 base hyperparameter (Phase 5 v3: Multi-seed MEDIAN) ───────────────
+# 改修 3: LGB lr=0.05 単一 + CB lr=0.05 単一 を 3 seed × 5 fold で MEDIAN.
+# 旧 (v2): LGB×3 lr (0.02/0.05/0.10) + CB×1 = 4 base × 1 seed × 5 fold = 20 run
+# 新 (v3): LGB×1 lr=0.05 + CB×1 lr=0.05 = 2 model × 3 seed × 5 fold = 30 run
+#   own_oof[lgb_own_med] = MEDIAN over 3 seed × 5 fold → 1 column
+#   own_oof[cb_own_med]  = MEDIAN over 3 seed × 5 fold → 1 column
+#   own base count: 4 → 2 (= MEDIAN aggregate により diversity を内部化)
+# 期待 runtime: 5-10 min/run × 30 = 2.5-5 hr (9 hr cap 内)
 OWN_BASE_ENABLE      = True
-OWN_LGB_LRS          = (0.02, 0.05, 0.10)
+OWN_USE_MEDIAN_SEEDS = True  # Phase 5 v3 toggle: True = MEDIAN over OWN_*_SEEDS_MED
+OWN_LGB_LRS          = (0.02, 0.05, 0.10)  # legacy 3-lr (v2 fallback)
 OWN_LGB_NUM_LEAVES   = 127
-OWN_LGB_N_ESTS       = (8000, 4000, 2000)
-OWN_LGB_SEEDS        = (42, 7, 123)
+OWN_LGB_N_ESTS       = (8000, 4000, 2000)  # legacy
+OWN_LGB_SEEDS        = (42, 7, 123)        # legacy
 OWN_CB_LR            = 0.05
 OWN_CB_DEPTH         = 8
 OWN_CB_N_EST         = 5000
 OWN_CB_SEED          = 42
+# Phase 5 v3 multi-seed MEDIAN config
+OWN_LGB_LR_MED       = 0.05
+OWN_LGB_N_EST_MED    = 4000
+OWN_LGB_SEEDS_MED    = (42, 123, 2024)
+OWN_CB_SEEDS_MED     = (42, 123, 2024)
+OWN_CB_N_EST_MED     = 4000
 OWN_TRAIN_HARD_TIMEOUT_S = 6 * 3600  # 6h hard cap on 自前 train phase
 
-# ─── Stacking knob ──────────────────────────────────────────────────────────
-# Ridge re-fit on 9-base (= 5 karnakbaev + 4 own). Fall back to NM 5-blend if
-# 自前 train fails or weight constellation is degenerate (own_total > 0.5).
+# ─── Heteroscedastic sample_weight (Phase 5 v3 改修 2) ──────────────────────
+# per-well-stats.parquet `b_well_resid_std` で 1/sigma 重み投入.
+# w_i = (1 / sigma_w(i)) / mean(.); clipped to [HETERO_W_CLIP_LO, HETERO_W_CLIP_HI]
+# fallback: parquet 不在 / b_well_resid_std 列無 → ones (= 等重み)
+HETERO_W_ENABLE      = True
+HETERO_W_CLIP_LO     = 0.5
+HETERO_W_CLIP_HI     = 2.0
+HETERO_W_FILL_P50    = 0.00835  # b_well_resid_std p50 (n=773 wells from per-well-stats.parquet)
+HETERO_W_STATS_PATH  = "/kaggle/input/rogii-per-well-stats/per-well-stats.parquet"  # primary
+HETERO_W_STATS_LOCAL = "outputs/eda/first_principles/per-well-stats.parquet"        # fallback for local smoke
+
+# ─── Stacking knob (Phase 5 v3 改修 4: path b = kb-side simple-average) ─────
+# 旧 (v2): 9-base Ridge を kb-5 + own-4 で fit → fold-misalign leak
+# 新 (v3): 2-stage blend = (1) own-Ridge meta (= true OOF, safe) + (2) 1D 線形 blend
+#           y_final = w_kb * mean(kb_5) + (1 - w_kb) * Ridge(own_2)
+#   w_kb は OOF grid-search [0.0, 1.0] step 0.05 で最適化
+# fallback: STACK_PATH_B_ENABLE=False で legacy 9-base Ridge を維持
 STACK_REFIT_RIDGE             = True
-STACK_OWN_WEIGHT_DEGRADE_LIMIT = 0.5  # if 自前 base 合計 weight > this, fallback
+STACK_OWN_WEIGHT_DEGRADE_LIMIT = 0.8  # path b では own diversity が low なので緩和 0.5→0.8
+STACK_PATH_B_ENABLE           = True
+STACK_PATH_B_GRID_STEP        = 0.05
 
 # Debug flags
 DEBUG_MAX_WELLS    = None   # set to e.g. 3 for fast iteration
@@ -284,6 +314,14 @@ _GPU = _has_gpu()
 print(f"GPU: {_GPU}  | CPUs: {NCPU}  | MODE: {MODE}")
 
 # ─── Model hyperparameters ───────────────────────────────────────────────────
+# Phase 5 v3: Huber loss + heteroscedastic sample weight + multi-seed MEDIAN
+#  - Huber loss (Huber 1964): fat-tail noise (dtvt_p95/std=2.4 > Gaussian 1.645).
+#    LGB `objective="huber"` + `alpha=0.9` ≈ tail 上位 10% を Laplace 扱い.
+#    CB `loss_function="Huber:delta=0.5"` ≈ p50(dtvt_std)=0.42 と整合.
+#  - Heteroscedastic sample_weight: per-well-stats.parquet の b_well_resid_std
+#    (n=773, p50=0.00835, range [0.0061, 0.0111]) を 1/sigma で重み投入.
+#  - Multi-seed MEDIAN: LGB lr=0.05 + CB lr=0.05 を 3 seed × 5 fold = 30 run
+#    で MEDIAN aggregate (Vandewiele 流, 数理 §2.2).
 LGB_BASE = dict(
     boosting_type    = "gbdt",
     learning_rate    = 0.04,
@@ -293,7 +331,8 @@ LGB_BASE = dict(
     colsample_bytree = 0.8,
     reg_lambda       = 5.0,
     reg_alpha        = 0.1,
-    objective        = "regression",
+    objective        = "huber",   # Phase 5 v3: was "regression"
+    alpha            = 0.9,       # Phase 5 v3: Huber delta scaling factor
     verbose          = -1,
     n_jobs           = -1,
     n_estimators     = 5000,
@@ -327,7 +366,7 @@ CB_PARAMS = dict(
     depth                 = 8,
     l2_leaf_reg           = 3.0,
     min_data_in_leaf      = 20,
-    loss_function         = "RMSE",
+    loss_function         = "Huber:delta=0.5",  # Phase 5 v3: was "RMSE"
     random_seed           = SEED,
     task_type             = "GPU" if _GPU else "CPU",
     od_type               = "Iter",
@@ -3208,11 +3247,63 @@ elif MODE in ("infer_edge_qm", "infer_edge_d_kalman"):
             "(skipped for runtime; deferred to v2)."
         )
 
-        # ── Step E: 自前 4 base train under Edge Q fold ────────────────────
+        # ── Step E: 自前 base train under Edge Q fold ──────────────────────
+        # Phase 5 v3:
+        #   - heteroscedastic sample_weight from per-well-stats.parquet
+        #   - Multi-seed MEDIAN: LGB×1 lr=0.05 + CB×1 lr=0.05 × 3 seed × 5 fold
         if OWN_BASE_ENABLE and not DEBUG_SKIP_OWN_TRAIN:
-            section(log, f"{pipeline_tag}: 自前 4 base train (Edge Q fold) "
-                         f"with {len(feature_cols_own)} features (Edge M{'+ Kalman' if (is_exp008 and KALMAN_ENABLE) else ''})")
+            section(log, f"{pipeline_tag}: 自前 base train (Edge Q fold) v3 "
+                         f"(MEDIAN={OWN_USE_MEDIAN_SEEDS}, hetero_w={HETERO_W_ENABLE})")
             own_t0 = time.perf_counter()
+
+            # ── Step E.1: build heteroscedastic sample_weight (per-well sigma) ──
+            w_train_full = np.ones(len(train_df_kb), dtype=np.float32)
+            if HETERO_W_ENABLE:
+                try:
+                    stats_path = None
+                    for cand in (HETERO_W_STATS_PATH, HETERO_W_STATS_LOCAL):
+                        if cand and Path(cand).exists():
+                            stats_path = cand; break
+                    if stats_path is None:
+                        raise FileNotFoundError(
+                            f"per-well-stats not found at {HETERO_W_STATS_PATH} / "
+                            f"{HETERO_W_STATS_LOCAL}; falling back to ones")
+                    stats_df = pd.read_parquet(stats_path)
+                    if "well_id" not in stats_df.columns or "b_well_resid_std" not in stats_df.columns:
+                        raise RuntimeError(
+                            f"per-well-stats schema unexpected: cols={stats_df.columns.tolist()[:6]}")
+                    sigma_map = dict(zip(
+                        stats_df["well_id"].astype(str),
+                        stats_df["b_well_resid_std"].astype(np.float32),
+                    ))
+                    sigma_arr = np.array([
+                        sigma_map.get(str(w), np.nan) for w in train_df_kb["well"].values
+                    ], dtype=np.float32)
+                    n_nan = int(np.isnan(sigma_arr).sum())
+                    if n_nan > 0:
+                        log.warning(
+                            f"  hetero_w: {n_nan} wells missing in per-well-stats; "
+                            f"filling with p50={HETERO_W_FILL_P50}")
+                        sigma_arr = np.where(np.isnan(sigma_arr),
+                                              HETERO_W_FILL_P50, sigma_arr)
+                    # w_i = 1 / sigma (less aggressive than 1/sigma^2)
+                    w_train_full = 1.0 / np.maximum(sigma_arr, 1e-6)
+                    w_train_full = w_train_full / float(w_train_full.mean())
+                    w_train_full = np.clip(
+                        w_train_full,
+                        HETERO_W_CLIP_LO, HETERO_W_CLIP_HI,
+                    ).astype(np.float32)
+                    log.info(
+                        f"  hetero_w: shape={w_train_full.shape} "
+                        f"min={w_train_full.min():.3f} max={w_train_full.max():.3f} "
+                        f"mean={w_train_full.mean():.3f} "
+                        f"(stats from {stats_path})")
+                except Exception as _hw_e:
+                    log.warning(f"  hetero_w build failed ({_hw_e}); using ones")
+                    w_train_full = np.ones(len(train_df_kb), dtype=np.float32)
+            else:
+                log.info("  HETERO_W_ENABLE=False → using uniform weights")
+
             # Make sure all extra cols exist in test_df too (they should via build_dataset)
             for c in feature_cols_own:
                 if c not in test_df.columns:
@@ -3225,10 +3316,28 @@ elif MODE in ("infer_edge_qm", "infer_edge_d_kalman"):
             X_test_full = test_df[feature_cols_own]
             n_train = len(train_df_kb)
             n_test  = len(test_df)
-            own_keys = ["lgb_own0", "lgb_own1", "lgb_own2", "cb_own"]
+
+            # Decide own_keys + seed schedule
+            if OWN_USE_MEDIAN_SEEDS:
+                own_keys = ["lgb_own_med", "cb_own_med"]
+                lgb_schedule = [
+                    (OWN_LGB_LR_MED, OWN_LGB_N_EST_MED, sd)
+                    for sd in OWN_LGB_SEEDS_MED
+                ]
+                cb_seeds = list(OWN_CB_SEEDS_MED)
+                cb_n_iter = OWN_CB_N_EST_MED
+            else:
+                own_keys = ["lgb_own0", "lgb_own1", "lgb_own2", "cb_own"]
+                lgb_schedule = list(zip(
+                    OWN_LGB_LRS, OWN_LGB_N_ESTS, OWN_LGB_SEEDS))
+                cb_seeds = [OWN_CB_SEED]
+                cb_n_iter = OWN_CB_N_EST
+
             own_oof  = {k: np.zeros(n_train, dtype=np.float32) for k in own_keys}
             own_test = {k: np.zeros(n_test, dtype=np.float32) for k in own_keys}
 
+            # Per-fold accumulator: list of (n_va,) arrays for each (model_type, fold)
+            # only used in MEDIAN mode; otherwise we directly write own_oof[key]
             try:
                 for fold in range(N_SPLITS):
                     elapsed = time.perf_counter() - own_t0
@@ -3242,10 +3351,13 @@ elif MODE in ("infer_edge_qm", "infer_edge_d_kalman"):
                     log.info(f"  fold {fold}: tr={len(tr_idx):,} va={len(va_idx):,}")
                     Xt  = X_kb_full.iloc[tr_idx]; yt = y_kb[tr_idx]
                     Xv  = X_kb_full.iloc[va_idx]; yv = y_kb[va_idx]
+                    w_tr = w_train_full[tr_idx]; w_va = w_train_full[va_idx]
 
-                    # 3 LGB with diverse-lr
-                    for j, (lr, ne, sd) in enumerate(zip(OWN_LGB_LRS, OWN_LGB_N_ESTS, OWN_LGB_SEEDS)):
-                        key = f"lgb_own{j}"
+                    # ── LGB seed loop ─────────────────────────────────────
+                    lgb_val_stack = []  # list of (n_va,) for MEDIAN
+                    lgb_test_stack = []  # list of (n_test,) for MEDIAN
+                    for j, (lr, ne, sd) in enumerate(lgb_schedule):
+                        key_legacy = f"lgb_own{j}"
                         params = dict(LGB_BASE)
                         params.update(dict(
                             learning_rate=lr,
@@ -3258,52 +3370,92 @@ elif MODE in ("infer_edge_qm", "infer_edge_d_kalman"):
                         try:
                             model.fit(
                                 Xt.values, yt,
+                                sample_weight=w_tr,
                                 eval_set=[(Xv.values, yv)],
+                                eval_sample_weight=[w_va],
                                 callbacks=[lgb.early_stopping(EARLY_STOP_ROUNDS),
                                            lgb.log_evaluation(0)],
                             )
                         except Exception as _lgb_e:
-                            log.warning(f"  fold{fold} {key}: GPU LGB failed ({_lgb_e}), retry CPU")
+                            log.warning(f"  fold{fold} lgb seed={sd}: GPU LGB failed ({_lgb_e}), retry CPU")
                             params["device_type"] = "cpu"
                             model = lgb.LGBMRegressor(**params)
                             model.fit(
                                 Xt.values, yt,
+                                sample_weight=w_tr,
                                 eval_set=[(Xv.values, yv)],
+                                eval_sample_weight=[w_va],
                                 callbacks=[lgb.early_stopping(EARLY_STOP_ROUNDS),
                                            lgb.log_evaluation(0)],
                             )
                         pred_v = model.predict(Xv.values).astype(np.float32)
                         pred_t = model.predict(X_test_full.values).astype(np.float32)
-                        own_oof[key][va_idx]  = pred_v
-                        own_test[key]        += pred_t / N_SPLITS
-                        log.info(f"    fold{fold} {key} lr={lr} ne_used={getattr(model, 'best_iteration_', ne)}: "
-                                 f"va RMSE={root_mean_squared_error(yv, pred_v):.4f}")
+                        if OWN_USE_MEDIAN_SEEDS:
+                            lgb_val_stack.append(pred_v)
+                            lgb_test_stack.append(pred_t)
+                        else:
+                            own_oof[key_legacy][va_idx]  = pred_v
+                            own_test[key_legacy]        += pred_t / N_SPLITS
+                        log.info(
+                            f"    fold{fold} lgb seed={sd} lr={lr} "
+                            f"ne_used={getattr(model, 'best_iteration_', ne)}: "
+                            f"va RMSE={root_mean_squared_error(yv, pred_v):.4f}")
+                        del model
+                        gc.collect()
 
-                    # 1 CatBoost
-                    cb_params = dict(CB_PARAMS)
-                    cb_params["learning_rate"] = OWN_CB_LR
-                    cb_params["depth"]         = OWN_CB_DEPTH
-                    cb_params["iterations"]    = OWN_CB_N_EST
-                    cb_params["random_seed"]   = OWN_CB_SEED
-                    try:
-                        cb_model = CatBoostRegressor(**cb_params)
-                        cb_model.fit(Pool(Xt.values, yt),
-                                     eval_set=Pool(Xv.values, yv),
-                                     use_best_model=True, verbose=0)
-                    except Exception as _cb_e:
-                        log.warning(f"  fold{fold} cb_own: GPU CB failed ({_cb_e}), retry CPU")
-                        cb_params["task_type"] = "CPU"
-                        cb_params.pop("devices", None)
-                        cb_model = CatBoostRegressor(**cb_params)
-                        cb_model.fit(Pool(Xt.values, yt),
-                                     eval_set=Pool(Xv.values, yv),
-                                     use_best_model=True, verbose=0)
-                    pred_v = cb_model.predict(Xv.values).astype(np.float32)
-                    pred_t = cb_model.predict(X_test_full.values).astype(np.float32)
-                    own_oof["cb_own"][va_idx]  = pred_v
-                    own_test["cb_own"]        += pred_t / N_SPLITS
-                    log.info(f"    fold{fold} cb_own: va RMSE="
-                             f"{root_mean_squared_error(yv, pred_v):.4f}")
+                    if OWN_USE_MEDIAN_SEEDS and lgb_val_stack:
+                        med_v = np.median(np.stack(lgb_val_stack, axis=0), axis=0).astype(np.float32)
+                        med_t = np.median(np.stack(lgb_test_stack, axis=0), axis=0).astype(np.float32)
+                        own_oof["lgb_own_med"][va_idx]  = med_v
+                        own_test["lgb_own_med"]        += med_t / N_SPLITS
+                        log.info(
+                            f"    fold{fold} lgb_own_med (MEDIAN over {len(lgb_val_stack)} seed): "
+                            f"va RMSE={root_mean_squared_error(yv, med_v):.4f}")
+
+                    # ── CatBoost seed loop ────────────────────────────────
+                    cb_val_stack = []
+                    cb_test_stack = []
+                    for sd in cb_seeds:
+                        cb_params = dict(CB_PARAMS)
+                        cb_params["learning_rate"] = OWN_CB_LR
+                        cb_params["depth"]         = OWN_CB_DEPTH
+                        cb_params["iterations"]    = cb_n_iter
+                        cb_params["random_seed"]   = sd
+                        try:
+                            cb_model = CatBoostRegressor(**cb_params)
+                            cb_model.fit(Pool(Xt.values, yt, weight=w_tr),
+                                         eval_set=Pool(Xv.values, yv, weight=w_va),
+                                         use_best_model=True, verbose=0)
+                        except Exception as _cb_e:
+                            log.warning(f"  fold{fold} cb seed={sd}: GPU CB failed ({_cb_e}), retry CPU")
+                            cb_params["task_type"] = "CPU"
+                            cb_params.pop("devices", None)
+                            cb_model = CatBoostRegressor(**cb_params)
+                            cb_model.fit(Pool(Xt.values, yt, weight=w_tr),
+                                         eval_set=Pool(Xv.values, yv, weight=w_va),
+                                         use_best_model=True, verbose=0)
+                        pred_v = cb_model.predict(Xv.values).astype(np.float32)
+                        pred_t = cb_model.predict(X_test_full.values).astype(np.float32)
+                        if OWN_USE_MEDIAN_SEEDS:
+                            cb_val_stack.append(pred_v)
+                            cb_test_stack.append(pred_t)
+                        else:
+                            own_oof["cb_own"][va_idx]  = pred_v
+                            own_test["cb_own"]        += pred_t / N_SPLITS
+                        log.info(
+                            f"    fold{fold} cb seed={sd}: "
+                            f"va RMSE={root_mean_squared_error(yv, pred_v):.4f}")
+                        del cb_model
+                        gc.collect()
+
+                    if OWN_USE_MEDIAN_SEEDS and cb_val_stack:
+                        med_v = np.median(np.stack(cb_val_stack, axis=0), axis=0).astype(np.float32)
+                        med_t = np.median(np.stack(cb_test_stack, axis=0), axis=0).astype(np.float32)
+                        own_oof["cb_own_med"][va_idx]  = med_v
+                        own_test["cb_own_med"]        += med_t / N_SPLITS
+                        log.info(
+                            f"    fold{fold} cb_own_med (MEDIAN over {len(cb_val_stack)} seed): "
+                            f"va RMSE={root_mean_squared_error(yv, med_v):.4f}")
 
                 # log overall OOF RMSE per own base
                 for k in own_keys:
@@ -3319,75 +3471,135 @@ elif MODE in ("infer_edge_qm", "infer_edge_d_kalman"):
         log.error(f"{pipeline_tag} train_df phase failed: {type(e).__name__}: {e}")
         log.warning("Falling back to karnakbaev 5-base NM blend (= exp005 同等)")
 
-    # ── Step F: 9-base Ridge meta fit + apply to test ───────────────────────
+    # ── Step F: meta blend — path b (Phase 5 v3) or legacy 9-base Ridge ────
+    # Phase 5 v3 改修 4: kb-side を simple-average で 1 column 化、own-side を
+    # own Ridge meta で fit → 1D 線形 blend で組合せ (fold-misalign leak 回避).
+    # 数式: y_final = w_kb * mean(kb_5) + (1 - w_kb) * Ridge(own_*)
     used_path = "fallback"
     if own_ok and y_kb is not None:
-        section(log, f"{pipeline_tag}: 9-base Ridge meta fit + apply")
+        # Load kb published OOF
         try:
-            # 9-base OOF stack (= 5 kb + 4 own)
-            stack_keys = ACTIVE_MODELS + ["lgb_own0", "lgb_own1", "lgb_own2", "cb_own"]
-            # Use karnakbaev's published OOF (from oof_predictions.parquet)
-            # for kb side, since refit-as-train-predict is leaky.
-            try:
-                oof_pred_path = ARTEFACT_DIR / "oof_predictions.parquet"
-                oof_df_kb = pd.read_parquet(oof_pred_path)
-                merge_keys = ["id"] if "id" in oof_df_kb.columns else None
-                if merge_keys is None:
-                    raise RuntimeError("oof_predictions has no 'id' column")
-                _tmp = train_df_kb[merge_keys].merge(
-                    oof_df_kb, on=merge_keys, how="left", suffixes=("", "_oof"))
-                kb_oof_for_stack = {
-                    k: _tmp[f"oof_{k}"].to_numpy(np.float32)
-                    for k in ACTIVE_MODELS
-                }
-                missing_kb = [k for k in ACTIVE_MODELS
-                              if np.isnan(kb_oof_for_stack[k]).any()]
-                if missing_kb:
-                    raise RuntimeError(f"kb OOF NaN after merge: {missing_kb}")
-                log.info("  using karnakbaev published OOF for kb side of 9-base stack")
-            except Exception as _kb_e:
-                log.warning(f"  kb OOF load failed ({_kb_e}) → using kb_oof_q (train-predict proxy)")
-                kb_oof_for_stack = kb_oof_q
+            oof_pred_path = ARTEFACT_DIR / "oof_predictions.parquet"
+            oof_df_kb = pd.read_parquet(oof_pred_path)
+            merge_keys = ["id"] if "id" in oof_df_kb.columns else None
+            if merge_keys is None:
+                raise RuntimeError("oof_predictions has no 'id' column")
+            _tmp = train_df_kb[merge_keys].merge(
+                oof_df_kb, on=merge_keys, how="left", suffixes=("", "_oof"))
+            kb_oof_for_stack = {
+                k: _tmp[f"oof_{k}"].to_numpy(np.float32)
+                for k in ACTIVE_MODELS
+            }
+            missing_kb = [k for k in ACTIVE_MODELS
+                          if np.isnan(kb_oof_for_stack[k]).any()]
+            if missing_kb:
+                raise RuntimeError(f"kb OOF NaN after merge: {missing_kb}")
+            log.info("  using karnakbaev published OOF for kb side")
+        except Exception as _kb_e:
+            log.warning(f"  kb OOF load failed ({_kb_e}) → using kb_oof_q (train-predict proxy)")
+            kb_oof_for_stack = kb_oof_q
 
-            Sx = np.column_stack(
-                [kb_oof_for_stack[k] for k in ACTIVE_MODELS] +
-                [own_oof[k] for k in ["lgb_own0", "lgb_own1", "lgb_own2", "cb_own"]]
-            )
-            St = np.column_stack(
-                [test_preds_kb[k] for k in ACTIVE_MODELS] +
-                [own_test[k] for k in ["lgb_own0", "lgb_own1", "lgb_own2", "cb_own"]]
-            )
-            ridge_ex = Ridge(alpha=1.0, fit_intercept=False, positive=True)
-            ridge_ex.fit(Sx, y_kb)
-            oof_blend = ridge_ex.predict(Sx)
-            r_avg = root_mean_squared_error(y_kb, Sx.mean(axis=1))
-            r_stk = root_mean_squared_error(y_kb, oof_blend)
-            wts   = ridge_ex.coef_ / max(ridge_ex.coef_.sum(), 1e-9)
-            log.info(f"  Simple 9-avg OOF RMSE: {r_avg:.4f}")
-            log.info(f"  Ridge 9-stk OOF RMSE: {r_stk:.4f}")
-            log.info(f"  Ridge weights        : "
-                     f"{dict(zip(stack_keys, np.round(wts, 4)))}")
-            own_total_w = float(sum(wts[len(ACTIVE_MODELS):]))
-            log.info(f"  own base total weight: {own_total_w:.4f}")
-            if own_total_w > STACK_OWN_WEIGHT_DEGRADE_LIMIT:
-                log.warning(
-                    f"  own total weight {own_total_w:.3f} > limit "
-                    f"{STACK_OWN_WEIGHT_DEGRADE_LIMIT} → degenerate, "
-                    f"falling back to NM 5-blend"
+        own_active_keys = list(own_oof.keys())  # depends on OWN_USE_MEDIAN_SEEDS
+
+        if STACK_PATH_B_ENABLE:
+            # ── path b: kb simple-average + own Ridge + 1D blend ───────────
+            section(log, f"{pipeline_tag}: path b blend = kb simple-avg + own Ridge + 1D")
+            try:
+                # kb side = simple mean over 5 base
+                kb_avg_oof = np.mean(
+                    np.column_stack([kb_oof_for_stack[k] for k in ACTIVE_MODELS]),
+                    axis=1,
+                ).astype(np.float64)
+                kb_avg_test = np.mean(
+                    np.column_stack([test_preds_kb[k] for k in ACTIVE_MODELS]),
+                    axis=1,
+                ).astype(np.float64)
+
+                # own side = positive Ridge over own bases (= true OOF, safe)
+                Sx_own = np.column_stack([own_oof[k] for k in own_active_keys])
+                St_own = np.column_stack([own_test[k] for k in own_active_keys])
+                ridge_own = Ridge(alpha=1.0, fit_intercept=False, positive=True)
+                ridge_own.fit(Sx_own, y_kb)
+                own_oof_blend = ridge_own.predict(Sx_own).astype(np.float64)
+                own_test_blend = ridge_own.predict(St_own).astype(np.float64)
+                own_coef = ridge_own.coef_
+                own_coef_norm = own_coef / max(own_coef.sum(), 1e-9)
+                log.info(f"  own Ridge weights: "
+                         f"{dict(zip(own_active_keys, np.round(own_coef_norm, 4)))}")
+
+                # 1D grid search for w_kb ∈ [0, 1]
+                step = STACK_PATH_B_GRID_STEP
+                grid = np.arange(0.0, 1.0 + step / 2, step)
+                best_w, best_r = 0.5, np.inf
+                for w in grid:
+                    blend = w * kb_avg_oof + (1.0 - w) * own_oof_blend
+                    r = root_mean_squared_error(y_kb, blend)
+                    if r < best_r:
+                        best_r, best_w = float(r), float(w)
+                r_kb_only  = root_mean_squared_error(y_kb, kb_avg_oof)
+                r_own_only = root_mean_squared_error(y_kb, own_oof_blend)
+                log.info(
+                    f"  path b grid search: w_kb*={best_w:.2f} blend OOF RMSE={best_r:.4f} "
+                    f"(kb_only={r_kb_only:.4f}, own_only={r_own_only:.4f})")
+                if best_w in (0.0, 1.0):
+                    log.warning(
+                        f"  path b: w_kb* boundary={best_w} → one side dominates "
+                        "(diversity low)")
+
+                test_delta = (
+                    best_w * kb_avg_test + (1.0 - best_w) * own_test_blend
+                ).astype(np.float64)
+                used_path = f"path_b_w{best_w:.2f}"
+                log.info(f"  → using path b blend (path tag={used_path})")
+            except Exception as e:
+                log.error(f"path b blend failed: {type(e).__name__}: {e}")
+                log.warning("Falling back to legacy 9-base Ridge")
+                used_path = "fallback_path_b"
+
+        # legacy 9-base Ridge fallback (or default if path b disabled / failed)
+        if used_path in ("fallback", "fallback_path_b") and not STACK_PATH_B_ENABLE:
+            section(log, f"{pipeline_tag}: legacy 9-base Ridge meta fit + apply")
+            try:
+                stack_keys = ACTIVE_MODELS + own_active_keys
+                Sx = np.column_stack(
+                    [kb_oof_for_stack[k] for k in ACTIVE_MODELS] +
+                    [own_oof[k] for k in own_active_keys]
                 )
-                raise RuntimeError("own_weight_degenerate")
-            if r_stk < r_avg:
-                test_delta = ridge_ex.predict(St).astype(np.float64)
-                used_path = "ridge_9base"
-                log.info("  → using Ridge 9-base re-fit blend")
-            else:
-                test_delta = St.mean(axis=1).astype(np.float64)
-                used_path = "mean_9base"
-                log.info("  → Ridge stk worse than avg, falling back to 9-mean")
-        except Exception as e:
-            log.error(f"9-base Ridge meta failed: {type(e).__name__}: {e}")
-            log.warning("Falling back to NM 5-blend")
-            used_path = "fallback"
+                St = np.column_stack(
+                    [test_preds_kb[k] for k in ACTIVE_MODELS] +
+                    [own_test[k] for k in own_active_keys]
+                )
+                ridge_ex = Ridge(alpha=1.0, fit_intercept=False, positive=True)
+                ridge_ex.fit(Sx, y_kb)
+                oof_blend = ridge_ex.predict(Sx)
+                r_avg = root_mean_squared_error(y_kb, Sx.mean(axis=1))
+                r_stk = root_mean_squared_error(y_kb, oof_blend)
+                wts   = ridge_ex.coef_ / max(ridge_ex.coef_.sum(), 1e-9)
+                log.info(f"  Simple n-avg OOF RMSE: {r_avg:.4f}")
+                log.info(f"  Ridge n-stk OOF RMSE: {r_stk:.4f}")
+                log.info(f"  Ridge weights        : "
+                         f"{dict(zip(stack_keys, np.round(wts, 4)))}")
+                own_total_w = float(sum(wts[len(ACTIVE_MODELS):]))
+                log.info(f"  own base total weight: {own_total_w:.4f}")
+                if own_total_w > STACK_OWN_WEIGHT_DEGRADE_LIMIT:
+                    log.warning(
+                        f"  own total weight {own_total_w:.3f} > limit "
+                        f"{STACK_OWN_WEIGHT_DEGRADE_LIMIT} → degenerate, "
+                        f"falling back to NM 5-blend"
+                    )
+                    raise RuntimeError("own_weight_degenerate")
+                if r_stk < r_avg:
+                    test_delta = ridge_ex.predict(St).astype(np.float64)
+                    used_path = "ridge_legacy"
+                    log.info("  → using legacy n-base Ridge re-fit blend")
+                else:
+                    test_delta = St.mean(axis=1).astype(np.float64)
+                    used_path = "mean_legacy"
+                    log.info("  → Ridge stk worse than avg, falling back to n-mean")
+            except Exception as e:
+                log.error(f"legacy Ridge meta failed: {type(e).__name__}: {e}")
+                log.warning("Falling back to NM 5-blend")
+                used_path = "fallback"
 
     if used_path == "fallback":
         section(log, f"{pipeline_tag} fallback: karnakbaev 5-base NM blend")
