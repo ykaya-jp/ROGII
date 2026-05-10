@@ -93,7 +93,21 @@ thbdh5765 とほぼ同じカテゴリだが **2-channel PF (Z + ANCC) のみ、B
 
 ## 5. 結果
 
-(TBD — submit 後に追記)
+### 5.0 Submit 状態 (2026-05-11 01:25 JST 時点)
+
+| submission | submit time (UTC) | description | status | publicScore |
+|---|---|---|---|---|
+| 52520314 (exp005) | 2026-05-10 16:14:20 | exp005 cache blend kernel v1 | **PENDING** | TBD |
+| 52519856 (exp003) | 2026-05-10 15:58:40 | exp003 LGB tysig | **PENDING** | TBD |
+| 52515207 (exp002) | 2026-05-10 13:25:34 | exp002 baseline | COMPLETE | 14.695 |
+
+**メモ**: exp005 submit 後 **11 分経過しても PENDING**、exp003 は **1.5 hr+ PENDING**。これは Kaggle 側の private rerun queue 遅延。我々の kernel 側はすでに COMPLETE で submission.csv 生成済み (kernel run 70s wall)、Kaggle host が hidden test で再評価中。LB 確定までさらに数十分かかる可能性あり。
+
+### 5.1 確認できる成功シグナル
+- kernel 自体は Kaggle 上で **完走** (70s wall、log 取得済 `submissions/exp005/rogii-exp005-cache-blend.log`)
+- submission.csv 14,151 rows、NaN 0、id 全 sample submission と一致、tvt 範囲 11591-12239 ft (= last_known_tvt 周辺で物理的に妥当)
+- 5 model (LGB×3 + XGB + CB) すべて inference 成功、delta range -28 〜 +16 ft (= train delta range × 1.5 でクリップ済)
+- license attribution: kernel docstring + commit message + experiments/exp005/notes.md にすべて明記済
 
 ## 5.1 次手 (LB が 10.x なら追加で打つ improvements 候補)
 
