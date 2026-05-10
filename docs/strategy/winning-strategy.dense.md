@@ -2,6 +2,68 @@
 
 > このファイルは `/home/yusuke_kaya/.claude/plans/rogii-wellbore-geology-modular-shannon.md` の repo 内コピー (origin)。両者は同じ内容を保つこと (片方を編集したらもう片方も追従させる)。harness 側は plan 一覧管理用、repo 側は実装中の参照用。
 
+## Phase 1.6 本質と独自 edge (2026-05-10 完了) ★★★★★
+
+調査群 (`docs/research/` 内の 5 件) を統合し、**「なぜ各手法が効くか」を物理的に理解** した上で次のように方針を確定:
+
+### A. 「絶対外せない 3 原則」 (= LB 12 帯到達の必要十分条件)
+
+1. **target = TVT - last_known_TVT** (residual)。絶対値予測は Phase 2 exp001 で破綻 (RMSE 30+) を確認済み。
+2. **`tvt_formula = -Z + ANCC + b_{well}`** を必ず features に入れる。Pearson -1.0 で完全線形 (`docs/research/problem-essence.dense.md §1`)。
+3. **typewell との matching を model に教える** (Beam Search / Particle Filter / Self-NCC のいずれか必須)。
+
+### B. 「公開 LB 10 を超える独自 edge」候補
+
+`docs/research/problem-essence.dense.md §12` に 9 候補。実装優先順:
+
+| 優先 | アイデア | 期待 LB 改善 | 実装段階 |
+|---|---|---|---|
+| 1 | **xcorr_tvt_features** (tasmim 流のローカル相関) | -0.5〜0.8 | exp003 で組み込む |
+| 2 | **wls_b_well + multi-scale SC (3 windows)** (romantamrazov 流) | -0.3〜0.5 | exp003 |
+| 3 | **gr_detrend_resid** (GR linear detrending) | -0.2〜0.4 | exp003 |
+| 4 | **7 beam configs + Numba JIT** (romantamrazov 流) | -0.2〜0.4 | exp004 |
+| 5 | **Sequence Transformer + cross-attention to typewell** (Plan 案 B、Approach A) | -0.3〜1.0 | Phase 4 |
+| 6 | **FORCE 2020 / VOLVE で pretext pretrain** | -0.2〜0.5 | Phase 4 |
+| 7 | **Multi-task DL** (TVT main + ΔTVT + Geology + 6 formation aux) | -0.2〜0.5 | Phase 4 |
+| 8 | **PINN soft constraint** (`TVT + Z - ANCC_pred = 0`) | -0.1〜0.3 | Phase 5 |
+| 9 | **Quantile/Median ensemble + Uncertainty calibration** | -0.1〜0.2 | Phase 5 |
+
+### C. ROGII 業界文脈の理解 (`domain-knowledge.dense.md`)
+
+- **Texas Eagle Ford / Austin Chalk / Buda Limestone** 系列の 6 formations と推定。`EGFDU/EGFDL` = Eagle Ford Upper/Lower, `BUDA` = Buda Limestone (Late Cretaceous, ~89-95 Ma)
+- ROGII (= Texas-based) の StarSteer 自動 geosteering software がコンペの背景
+- SLB Neuro (2024) / Halliburton LOGIX (2025) が業界 frontier。ROGII もこの方向の AI training ターゲット
+- Beam Search / PF は **手作業の interactive stretching & squeezing を自動化** したもの
+
+### D. 公開 LB の現状
+
+| ノートブック | 著者 | LB | 主アプローチ |
+|---|---|---|---|
+| `score-10-081-score-lb-32-rank` | needless090 | **10.081** | Beam×5 + PF×2 + 6-form plane-fit + Self-NCC + LGB×3 + CB×3 + TabICL + Ridge stack |
+| `rogii-super-solution-lb-top-3` | romantamrazov | **~10.1 (Top 3)** | numba-PF + 7 beams + plane-fit + LGB×3 + CB |
+| `physics-informed-baseline` | karnakbaev | **10.784** | hybrid + Self-NCC + Affine GR cal + 5 base + Ridge |
+| `lb-11-068-...` | tasmim | 11.068 | Beam + plane-fit + xcorr_tvt + GBM |
+| `rogii-plane-fit-formation-top-knn` | konbu17 | 11.912 | 6-form plane-fit + KNN + Beam + LGB×3 + XGB |
+| `rogii-super-baseline-lb` | romantamrazov | 12.602 | 公開 baseline (LightGBM) |
+
+⇒ **目標 LB 8-9 帯 (= 1 位射程)** は、Phase 4 の DL hybrid と Phase 5 の post-proc 込みで達成可能と判定。
+
+## Phase 1.5 公開ノートブック分析 (2026-05-10) ★★★★★
+
+> 詳細: [`docs/research/public-notebook-analysis.dense.md`](../research/public-notebook-analysis.dense.md)
+> Top 8 公開ノートブック (LB 10.081 / 11.068 / 11.912 / 12.388 / 12.602) を `_research_kernels/` に download し直接読解した結果、**コンペ全体で外せない核心 insight** が判明:
+
+1. **物理関係 `TVT = -Z + ANCC + b_well`** (Pearson -1.0, resid_std 0.007 ft) ← **決定的**
+   - `ANCC` は test では NaN だが、X/Y centroid で plane fit imput 可
+   - 6 formations (ANCC, ASTNU, ASTNL, EGFDU, EGFDL, BUDA) すべてで同様の formula
+2. **target = TVT − last_known_TVT (residual)** ← **全 top notebooks 共通**
+   - 絶対 TVT を直接予測すると RMSE 30+ (= 我々の exp001 の失敗)、residual で 10-15 帯
+3. **FormationPlaneKNN imputer** (centroid K=10 plane fit) → 各 formation を全 wells で impute → tvt_formula 計算
+4. **Beam Search (5-7 configs) + Particle Filter** が LB 10 → 12 帯の主要差分
+
+これらを Plan の **案 A** に組み込み (Plan は方向性は合っていたが、上記 1-3 を欠いていた)。
+案 A v2 の最小構成で **LB 12 帯 (公開 baseline 並)**、Beam+PF+post-proc で **LB 10 帯 (公開 top 級)**、その上に B/C を積んで **LB 8-9 (1 位射程)** が現実的目標。
+
 ## Phase 1 確定情報 (2026-05-10 EDA 結果)
 
 > 全 776 wells (773 train + 3 test sample) を `src/rogii/eda.py` で集計済み。詳細は [`docs/research/data-spec.dense.md`](../research/data-spec.dense.md) 参照。Plan の数値前提はこの結果で確定:

@@ -243,3 +243,6 @@ mlartifacts/
 # Local env
 .env
 .env.local
+
+# Public Kaggle notebooks pulled for research (regenerable via .venv/bin/kaggle kernels pull)
+_research_kernels/
