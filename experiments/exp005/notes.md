@@ -75,9 +75,9 @@ thbdh5765 とほぼ同じカテゴリだが **2-channel PF (Z + ANCC) のみ、B
 - [x] branch `feat/phase-3-exp005-cache-blend` 作成
 - [x] thbdh5765/karnakbaev datasets metadata + 小ファイル DL → 中身確認
 - [x] karnakbaev kernel script (`physics-informed-baseline.py`, 1978 行) のロジック把握
-- [ ] kernel script (`exp005_cache_blend.py`) 作成 = karnakbaev kernel base + path 修正 + (任意) ensemble weight 微調整
-- [ ] kernel-metadata.json 作成 (dataset_sources に `karnakbaevarthur/rogii-code-helper-dataset`)
-- [ ] ローカル smoke (= 1 well で test features build + predict 確認)
+- [x] kernel script (`exp005_cache_blend.py`) 作成 = karnakbaev kernel base + path 修正 + license attribution
+- [x] kernel-metadata.json 作成 (dataset_sources に `karnakbaevarthur/rogii-code-helper-dataset`)
+- [x] ローカル smoke (= 3 test wells で test features build + LGB/XGB/CB inference + submission 生成 確認)
 - [ ] kernel push → run → wait → submission.csv 取得
 - [ ] submit + LB 確認
 - [ ] 達成 LB を本ファイル §5 に記載
@@ -103,3 +103,19 @@ thbdh5765 とほぼ同じカテゴリだが **2-channel PF (Z + ANCC) のみ、B
 - romantamrazov super solution (Top 3 LB ~10.1, MIT): https://www.kaggle.com/code/romantamrazov/rogii-super-solution-lb-top-3
 - 我々の docs/research/host-datasets.dense.md (host dataset 一覧)
 - 我々の docs/research/top3-distill.dense.md (Top 3 6 要素分析)
+
+## 7. Local smoke 結果 (2026-05-11 01:10 JST)
+
+- run dir: `/tmp/rogii_smoke/smoke.py` (= kernel script の DEBUG_MAX_WELLS=5 + paths を local に向けたコピー)
+- test feature build: **21.5 秒** for 3 test wells (000d7d20, 00bbac68, 00e12e8b) × 14,151 rows
+- model load: LGB×3 (158 features each) + XGB + CB すべて成功
+- delta range:
+  - lgb0: -15.23 ~ 14.68
+  - lgb1: -15.64 ~ 15.93
+  - lgb2: -16.05 ~ 15.12
+  - xgb : -13.92 ~ 16.07
+  - cb  : -14.91 ~ 16.83
+- submission.csv 生成: shape (14151, 2)、NaN 0、id 全 sample submission と一致、tvt 範囲 11591-12239 ft (妥当)
+- 全パイプライン < 50 秒 (= Kaggle 上では train wells 全 build を加味しても 30-60 分予想)
+
+**結論**: kernel script の論理動作確認済 → kernel push して本番 LB 取得に進む。
