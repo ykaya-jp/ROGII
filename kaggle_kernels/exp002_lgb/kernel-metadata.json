@@ -1,0 +1,14 @@
+{
+  "id": "ky7240/rogii-exp002-lgb-residual-tvt-formula",
+  "title": "ROGII exp002 LGB residual + tvt_formula",
+  "code_file": "exp002_lgb.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "false",
+  "enable_tpu": "false",
+  "enable_internet": "false",
+  "dataset_sources": [],
+  "competition_sources": ["rogii-wellbore-geology-prediction"],
+  "kernel_sources": []
+}
