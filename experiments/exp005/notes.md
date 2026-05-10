@@ -95,6 +95,17 @@ thbdh5765 とほぼ同じカテゴリだが **2-channel PF (Z + ANCC) のみ、B
 
 (TBD — submit 後に追記)
 
+## 5.1 次手 (LB が 10.x なら追加で打つ improvements 候補)
+
+| 候補 | 構造原理 | 期待 LB 改善 | コスト |
+|---|---|---|---|
+| C1: TabICL 投入 | `thermostatic/rogii-tabicl-v2-public-assets` を attach、TabICL 2.1.1 wheel install + ckpt load → base model に追加。Ridge stack 再学習 | -0.5〜-1.0 ft (needless090 LB 10.081 を再現する case) | TabICL infer 時間長め (= 1-2 hr？)、stack 再学習必要 |
+| C2: 自前 OOF (exp003) blend | `karnakbaevarthur/rogii-code-helper-dataset` の OOF.parquet (149 MB) を attach + 我々の exp003 OOF (= phase-2 LGB tysig) を加算で Ridge meta 再学習 → train wells set が同じなら直接 stack 可能 | -0.3〜-0.8 ft (= 異質 model = decorrelate 効果) | 我々の exp003 OOF を local artifact として 5-fold で取得する作業必要、~1 hr |
+| C3: pilkwang/nina2025/svanikkolli kernel の inference 結果 blend | これら他公開上位 kernel (LB 10.1-11.x) を別 dataset として attach、それぞれ infer して 5 base predictions を Ridge meta で blend | -0.5〜-1.5 ft 帯 | 他 kernel 各々 attach + run + path 修正 = 1-2 hr/kernel |
+| C4: karnakbaev kernel に thbdh5765 cache を train side に組み込み | thbdh5765/rogii-v1-train-cache (173 features) を train_df の代わりにロード、karnakbaev features (158) は subset 関係 → re-train LGB×3 with thbdh5765 features | -0.3〜-0.7 ft (= GR multi-scale SC + Beam 7 configs + tdpf-* anchors の追加分) | thbdh5765 schema と karnakbaev features の対応 mapping 必要、再学習 1-2 hr |
+
+**最有力**: C1 (TabICL 単体で needless090 LB 10.081 達成例あり) → C3 (kernel ensemble で diversity 最大化)。 ただし exp005 が LB 10.x で着地するなら、TabICL 単体投入で 9.x 帯に乗る可能性が最高。
+
 ## 6. References
 
 - karnakbaev kernel (LB 10.784, public): https://www.kaggle.com/code/karnakbaevarthur/top-2-rank-10-784-physics-informed-baseline
