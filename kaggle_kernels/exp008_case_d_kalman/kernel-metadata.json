@@ -11,7 +11,8 @@
   "dataset_sources": [
     "karnakbaevarthur/rogii-code-helper-dataset",
     "thermostatic/rogii-tabicl-v2-public-assets",
-    "thbdh5765/rogii-v1-train-cache"
+    "thbdh5765/rogii-v1-train-cache",
+    "ky7240/rogii-per-well-stats"
   ],
   "competition_sources": ["rogii-wellbore-geology-prediction"],
   "kernel_sources": []
