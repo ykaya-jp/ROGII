@@ -1,0 +1,16 @@
+{
+  "gr_cr_lb_1pt_p10": 4.087771634691077,
+  "gr_cr_lb_1pt_p50": 6.378919079881541,
+  "gr_cr_lb_1pt_p90": 8.765635462729456,
+  "gr_slope_p50_p50": 1.4090909090909065,
+  "gr_noise_std_p50": 8.77220165289937,
+  "formula_oracle_rmse_p10": 0.005172620769576445,
+  "formula_oracle_rmse_p50": 0.005498174808795914,
+  "formula_oracle_rmse_p90": 0.007656656393990035,
+  "formula_oracle_rmse_overall": 0.006213577914923525,
+  "gr_match_synth_rmse_p10": 187.69526307375926,
+  "gr_match_synth_rmse_p50": 301.40003418980416,
+  "gr_match_synth_rmse_p90": 478.33878683157144,
+  "gr_match_synth_rmse_overall": 337.1356708997868,
+  "n_wells": 773
+}

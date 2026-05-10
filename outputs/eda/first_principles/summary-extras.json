@@ -1,0 +1,16 @@
+{
+  "best_lag_ft_p50_abs": 0.0,
+  "min_resid_std_p10": 9.178549339445462,
+  "min_resid_std_p50": 12.677799081104018,
+  "min_resid_std_p90": 16.97871552067521,
+  "b_drift_first_last_p50_abs": 0.0015407964574478683,
+  "b_drift_per_ft_p50_abs": 8.632876736668474e-07,
+  "tail_dtvt_std_p50": 0.009275407321529509,
+  "extrap_resid_std_at_md_50": 1.6364105178686592,
+  "extrap_resid_std_at_md_500": 9.086342134954492,
+  "extrap_resid_std_at_md_2000": 15.39257942902114,
+  "extrap_resid_std_at_md_4000": 18.82528833265758,
+  "n_wells_extras": 773,
+  "n_wells_extrap_curve": 773,
+  "naive_last_value_rmse_overall": 15.909852870734554
+}

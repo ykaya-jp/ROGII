@@ -1,0 +1,23 @@
+{
+  "n_wells_measured": 773,
+  "GR_noise_std_p10": 6.172036183734815,
+  "GR_noise_std_p50": 8.375742568553322,
+  "GR_noise_std_p90": 11.702916647911076,
+  "dTVT_std_p50": 0.41692371887807245,
+  "dTVT_p95_p50": 1.0100000000002183,
+  "b_well_resid_std_p10": 0.007358307890637485,
+  "b_well_resid_std_p50": 0.0083476866037054,
+  "b_well_resid_std_p90": 0.00944925175701183,
+  "tw_gr_resid_std_p10": 9.840268236346073,
+  "tw_gr_resid_std_p50": 13.894405578592231,
+  "tw_gr_resid_std_p90": 18.882361050080632,
+  "ar1_phi_p50": 0.9988700030217488,
+  "ar1_eps_std_p50": 0.015562299668784004,
+  "hidden_len_p10": 3263.0,
+  "hidden_len_p50": 4840.0,
+  "hidden_len_p90": 6348.6,
+  "hidden_len_max": 10052.0,
+  "visible_ratio_p50": 0.2600089299002828,
+  "n_visible_p50": 1703.0,
+  "n_visible_p10": 1422.6
+}
