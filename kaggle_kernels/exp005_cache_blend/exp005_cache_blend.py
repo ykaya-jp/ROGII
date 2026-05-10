@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # ROGII exp005 — Cache + karnakbaev artifacts blend (LB target: 9–10 帯)
+# # ROGII exp005 v3 — Cache + karnakbaev artifacts blend + Edge S + Edge R (LB target: ~9.95)
 #
 # Self-contained Kaggle script that reuses pre-trained model artefacts published in
 #   `karnakbaevarthur/rogii-code-helper-dataset` (apache-2.0 license)
@@ -16,6 +16,13 @@
 #   5. **Edge S: dTVT 0.01 grid round-to-grid**, inspired by hengck23 discussion 697431.
 #      Submission の最終 tvt を np.round(., 2) で 0.01 ft grid に snap。
 #      773/773 wells で dTVT min_step = 0.01 ft が 100% 普遍 (中央実測)。
+#   6. **Edge R: test-time online learning (= continued training on test visible TVT_input),
+#      inspired by discussion 698002**. test wells の visible region の末尾 K 行を
+#      擬似 hidden に変換、 `is_train=True` 経路で feature+target を生成して
+#      `lgb.train(..., init_model=base, num_boost_round=200)` で 5 base 各々を fine-tune。
+#      online predict と既存 NM blend を w_R=0.5 で重ね合わせ。
+#      公開実測: online 10.953 vs no-online 11.323 = -0.370 ft (topic 698002)。
+#      leak guard: hidden TVT に絶対触れない (= visible TVT_input のみ参照)。
 #
 # Source attribution / license:
 #   - Pipeline: based on karnakbaevarthur/top-2-rank-10-784-physics-informed-baseline
@@ -233,6 +240,17 @@ if _GPU and "GPU" in CB_PARAMS.get("task_type", ""):
 EARLY_STOP_ROUNDS = 150
 LOG_EVERY         = 500
 FINAL_ITER_SCALE  = 1.10
+
+# ─── Edge R knobs (test-time online learning, exp005 v3 新規) ──────────────
+# Inspired by Kaggle discussion topic 698002 (online 10.953 vs no-online 11.323 = -0.370 ft).
+# test wells の visible region の末尾 K 行を擬似 hidden に変換し、
+# `is_train=True` 経路で feature+target を生成 → LGB 5 base に init_model continued training。
+EDGE_R_ENABLE          = True
+EDGE_R_VISIBLE_TAIL_K  = 100   # visible 内の擬似 hidden サイズ (= 平均 hidden length ~110 と同等)
+EDGE_R_MIN_VISIBLE_ROWS = 30    # visible 行数 30 未満の well は skip (= 教師信号不十分)
+EDGE_R_NUM_BOOST       = 200    # continued training round 数 (= topic 698002 で 100-300 推奨)
+EDGE_R_LR_MUL          = 0.5    # continued training の lr × 0.5 (= 過適応抑制)
+EDGE_R_BLEND_W         = 0.5    # online 重ね合わせ weight (= exp005 v3 は固定、 grid なし)
 
 # Meta columns excluded from ML features
 _META_COLS = {"well", "id", "prediction_id", "target", "group_id", "row_idx"}
@@ -1349,6 +1367,248 @@ def get_feature_columns(df: pd.DataFrame) -> List[str]:
 print("Dataset builder loaded ✓")
 
 
+# ## 9.5 Edge R — Test-Time Online Learning (exp005 v3 新規)
+# #
+# `discussion 698002` で公開された "online 10.953 vs no-online 11.323 = -0.370 ft"
+# の効果を再現する。 test wells の visible region 末尾 K 行を擬似 hidden に変換し、
+# `build_well_features(.., is_train=True)` 経路で (X, y) を生成、
+# pretrained LGB に `init_model` で continued training する。
+#
+# leak guard:
+#   - visible region の TVT_input のみ参照、 hidden mask 域 (= host が公開してない部分) は
+#     一切触らない (= build_well_features の `ev` filter で自動排除)
+#   - 各 well 内で完結、 cross-well leak なし
+#   - karnakbaev pretrained は train data で fit 済、 test visible で warm start するのみ
+
+# In[ ]:
+
+
+def build_visible_dataset(
+    data_dir:   Path,
+    max_wells:  int = None,
+    tail_k:     int = EDGE_R_VISIBLE_TAIL_K,
+    min_visible_rows: int = EDGE_R_MIN_VISIBLE_ROWS,
+    n_jobs:     int = NCPU,
+) -> Optional[pd.DataFrame]:
+    """Build a test-visible-as-pseudo-hidden dataset for Edge R online learning.
+
+    各 test well で:
+      1. visible rows (= TVT_input.notna()) を抽出
+      2. 末尾 `tail_k` 行を擬似 hidden に変換 (= TVT_input → NaN にマスク)
+      3. TVT 列を visible の TVT_input から copy (= build_well_features の target 要求を満たす)
+      4. tmp file に save し、 build_well_features(is_train=True) で feature 化
+      5. 全 well で concat
+    visible 行数 < `min_visible_rows + tail_k` の well は skip。
+    """
+    import tempfile
+
+    hw_files = sorted(data_dir.glob("*__horizontal_well.csv"))
+    if max_wells is not None:
+        hw_files = hw_files[:max_wells]
+
+    print(f"[Edge R] Building visible-as-pseudo-hidden dataset from {len(hw_files)} wells "
+          f"(tail_k={tail_k}, min_visible={min_visible_rows})")
+
+    def _build_one_visible(hw_path_str: str) -> Optional[pd.DataFrame]:
+        hw_path = Path(hw_path_str)
+        wid     = hw_path.stem.replace("__horizontal_well", "")
+        tw_p    = hw_path.parent / f"{wid}__typewell.csv"
+        if not tw_p.exists():
+            return None
+        try:
+            hw_raw = pd.read_csv(hw_path)
+        except Exception:
+            return None
+        if "TVT_input" not in hw_raw.columns:
+            return None
+
+        visible_mask = hw_raw["TVT_input"].notna().to_numpy()
+        n_visible    = int(visible_mask.sum())
+        # need: min_visible_rows for kn + tail_k for ev
+        if n_visible < (min_visible_rows + tail_k):
+            return None
+
+        # visible 行のうち末尾 tail_k 行を擬似 hidden に変換
+        visible_idx = np.flatnonzero(visible_mask)
+        tail_idx    = visible_idx[-tail_k:]
+        # original_tvt_input は temp 用に保存（target に使う）
+        orig_tvt_input = hw_raw["TVT_input"].to_numpy(np.float32).copy()
+
+        hw_mod = hw_raw.copy()
+        # target 列を host train-style に作る: TVT = original TVT_input (visible のみ filled)
+        hw_mod["TVT"] = np.nan
+        hw_mod.loc[hw_mod["TVT_input"].notna(), "TVT"] = orig_tvt_input[visible_mask]
+        # 擬似 hidden 化: 末尾 tail_k 行の TVT_input を NaN に
+        hw_mod.loc[tail_idx, "TVT_input"] = np.nan
+        # build_well_features は ev["TVT"].notna() を filter するので、
+        # 擬似 hidden 行の TVT (= 元 TVT_input) は残しておく → target に使われる
+
+        # tmp file に save (= build_well_features は csv path を要求)
+        tmp_dir = tempfile.gettempdir()
+        tmp_hw  = Path(tmp_dir) / f"_edge_r_{wid}__horizontal_well.csv"
+        hw_mod.to_csv(tmp_hw, index=False)
+
+        try:
+            df = build_well_features(str(tmp_hw), str(tw_p), is_train=True)
+        except Exception as exc:
+            print(f"  WARN [Edge R {wid}]: {exc}")
+            df = None
+        finally:
+            try: tmp_hw.unlink()
+            except Exception: pass
+        return df
+
+    from tqdm.auto import tqdm
+    results = Parallel(n_jobs=n_jobs, prefer="threads")(
+        delayed(_build_one_visible)(str(p))
+        for p in tqdm(hw_files, desc="Edge R (visible-as-ev)")
+    )
+    parts = [r for r in results if r is not None]
+    if not parts:
+        print("[Edge R] No usable wells — disabling Edge R")
+        return None
+    df = pd.concat(parts, ignore_index=True)
+    print(f"[Edge R] visible dataset: {df.shape}  wells={df['well'].nunique()}  "
+          f"skipped={len(hw_files) - len(parts)}")
+    return df
+
+
+def edge_r_continued_train_lgb(
+    base_booster,
+    X_R: np.ndarray,
+    y_R: np.ndarray,
+    base_params: dict,
+    num_boost_round: int = EDGE_R_NUM_BOOST,
+    lr_mul: float = EDGE_R_LR_MUL,
+):
+    """Apply LightGBM continued training (warm start) on visible-as-pseudo-hidden data.
+
+    base_params から lr × lr_mul、 early stopping 無効化、 objective 維持で
+    `lgb.train(.., init_model=base_booster, num_boost_round=R)` を実行。
+    """
+    p = dict(base_params)
+    p["learning_rate"] = float(p.get("learning_rate", 0.04)) * float(lr_mul)
+    # GPU/CPU は base と整合
+    p.pop("n_estimators", None)
+    p.pop("early_stopping_rounds", None)
+    ds = lgb.Dataset(X_R, label=y_R)
+    online = lgb.train(
+        p, ds,
+        num_boost_round=int(num_boost_round),
+        init_model=base_booster,
+        keep_training_booster=False,
+    )
+    return online
+
+
+def edge_r_apply(
+    test_df:         pd.DataFrame,
+    visible_df:      Optional[pd.DataFrame],
+    base_models:     dict,
+    feature_cols:    List[str],
+    nm_w:            dict,
+    test_delta_base: np.ndarray,
+    log,
+) -> Tuple[np.ndarray, dict]:
+    """Run Edge R pipeline and return (test_delta_blended, diagnostics).
+
+    Returns:
+      test_delta_blended: blended delta (= w_R × online_NM + (1-w_R) × base_NM)
+      diagnostics: dict of online metrics
+    """
+    diag: Dict[str, Any] = {"applied": False}
+
+    if not EDGE_R_ENABLE or visible_df is None or len(visible_df) == 0:
+        log.warning("[Edge R] skipped: disabled or empty visible dataset")
+        return test_delta_base, diag
+
+    # feature_cols は LGB が知っている columns (= karnakbaev schema)
+    missing = [c for c in feature_cols if c not in visible_df.columns]
+    if missing:
+        log.warning(f"[Edge R] visible_df missing {len(missing)} cols, e.g. {missing[:3]} — filling 0")
+        for c in missing:
+            visible_df[c] = np.float32(0.0)
+
+    X_R = visible_df[feature_cols].to_numpy(np.float32)
+    y_R = visible_df["target"].to_numpy(np.float32)
+    log.info(f"[Edge R] X_R shape={X_R.shape}  y_R range=[{y_R.min():.3f}, {y_R.max():.3f}]")
+
+    # NaN/inf guard
+    if not np.all(np.isfinite(y_R)):
+        n_bad = int((~np.isfinite(y_R)).sum())
+        log.warning(f"[Edge R] dropping {n_bad} non-finite y_R rows")
+        finite = np.isfinite(y_R)
+        X_R, y_R = X_R[finite], y_R[finite]
+    if len(y_R) < 100:
+        log.warning(f"[Edge R] too few visible-as-pseudo-hidden rows ({len(y_R)}) — disabling")
+        return test_delta_base, diag
+
+    # LGB 3 base のみ continued training (= XGB/CB は base predict そのまま)
+    X_test_full = test_df[feature_cols].to_numpy(np.float32)
+    online_preds = {}
+    for seed_idx, seed in enumerate(LGB_SEEDS):
+        key = f"lgb{seed_idx}"
+        if key not in base_models:
+            continue
+        try:
+            base_params = make_lgb_model(seed)
+            online_booster = edge_r_continued_train_lgb(
+                base_models[key], X_R, y_R, base_params,
+                num_boost_round=EDGE_R_NUM_BOOST,
+                lr_mul=EDGE_R_LR_MUL,
+            )
+            p_online = online_booster.predict(X_test_full).astype(np.float64)
+            online_preds[key] = p_online
+            log.info(f"[Edge R]   {key} online predict range="
+                     f"[{p_online.min():.3f}, {p_online.max():.3f}]")
+        except Exception as exc:
+            log.warning(f"[Edge R]   {key} continued training failed ({type(exc).__name__}: {exc})")
+            online_preds[key] = base_models[key].predict(X_test_full).astype(np.float64)
+            log.warning(f"[Edge R]   {key} fallback to base predict")
+
+    if not online_preds:
+        log.warning("[Edge R] no online predictions produced — keeping base delta")
+        return test_delta_base, diag
+
+    # NM blend は karnakbaev 5 base 想定なので、 online は LGB 3 だけだが
+    # NM blend に LGB 3 を online で差替え + XGB/CB を base で残す、 として concat
+    online_full = {}
+    for k in ACTIVE_MODELS:
+        if k in online_preds:
+            online_full[k] = online_preds[k]
+        elif k in base_models:
+            # XGB/CB は base predict (= continued training なし)
+            m = base_models[k]
+            if k == "cb":
+                online_full[k] = m.predict(X_test_full.astype(np.float64)).astype(np.float64)
+            else:
+                online_full[k] = m.predict(X_test_full).astype(np.float64)
+
+    test_delta_online = apply_ensemble_nm(online_full, nm_w)
+    log.info(f"[Edge R] online NM blend range="
+             f"[{test_delta_online.min():.3f}, {test_delta_online.max():.3f}]")
+    log.info(f"[Edge R] base    NM blend range="
+             f"[{test_delta_base.min():.3f}, {test_delta_base.max():.3f}]")
+
+    w = float(EDGE_R_BLEND_W)
+    blended = w * test_delta_online + (1.0 - w) * test_delta_base
+    diff = blended - test_delta_base
+    log.info(f"[Edge R] blended w={w} (online) + {1-w} (base)")
+    log.info(f"[Edge R]   diff abs mean: {np.abs(diff).mean():.4f}  max: {np.abs(diff).max():.4f}")
+
+    diag = {
+        "applied"       : True,
+        "n_visible_rows": int(len(y_R)),
+        "n_lgb_online"  : int(sum(1 for k in online_preds if k.startswith("lgb"))),
+        "w_R"           : w,
+        "diff_abs_mean" : float(np.abs(diff).mean()),
+    }
+    return blended, diag
+
+
+print("Edge R (test-time online learning) loaded ✓")
+
+
 # ## 10. Model Registry (LGB×3 seeds + XGB + CatBoost)
 
 # In[ ]:
@@ -1994,6 +2254,30 @@ elif MODE == "infer":
         test_delta = apply_ensemble_ridge(test_preds, ridge)
     else:
         test_delta = apply_ensemble_nm(test_preds, nm_w)
+
+    # ── Edge R: test-time online learning (= continued training on test visible) ──
+    # 出典: discussion 698002 (online 10.953 vs no-online 11.323 = -0.370 ft)
+    # leak guard: visible TVT_input のみ参照、 hidden TVT に絶対触れない
+    if EDGE_R_ENABLE:
+        section(log, "Edge R: test-time online learning")
+        try:
+            with timer(log, "Edge R visible dataset build"):
+                visible_df = build_visible_dataset(
+                    TEST_DIR,
+                    max_wells=DEBUG_MAX_WELLS,
+                    tail_k=EDGE_R_VISIBLE_TAIL_K,
+                    min_visible_rows=EDGE_R_MIN_VISIBLE_ROWS,
+                    n_jobs=NCPU,
+                )
+            with timer(log, "Edge R continued training + blend"):
+                test_delta, edge_r_diag = edge_r_apply(
+                    test_df, visible_df, models, feature_cols, nm_w,
+                    test_delta_base=test_delta, log=log,
+                )
+            log.info(f"[Edge R] diagnostics: {edge_r_diag}")
+        except Exception as _er_e:
+            log.error(f"[Edge R] pipeline failed ({type(_er_e).__name__}: {_er_e}); "
+                      f"falling back to base test_delta")
 
     test_delta_pp = apply_postproc(test_df, test_delta, best_alpha, best_tau)
     test_delta_sg = sg_smooth_per_well(test_df, test_delta_pp)
