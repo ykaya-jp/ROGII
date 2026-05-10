@@ -124,10 +124,66 @@ CV と public LB の diff を毎回算出。
 |---|---|---|---|---|
 | exp002 | 13.82 | **14.695** | **+0.875** | **CV-LB +0.875 ft 悪化方向**。原因仮説: (1) GroupKFold by well の visible/hidden 分割が test の hidden パターンを過小推定、(2) tvt_formula の 6-formation FormationPlaneKNN の test 側 imputation が train より弱い、(3) hidden zone 末端の systematic bias (= `first-principles.dense.md` §2.4 でのMD 9000+ で mean -16) を捕捉できていない |
 | exp003 | (no 自前 CV) | **17.510** | very large | **CRITICAL FAILURE**: 自前 LGB tysig 単独路線で features 33+ 過剰添加 → 大幅 overfit。LB 17.510 は公開 baseline (12.602) どころか exp002 baseline (14.695) より悪化 +2.815 ft。**学び**: (a) 自前複雑 features 単独路線は捨て、karnakbaev blend を母法に補助 features を加える路線に集中 (= exp005-009 路線)、(b) 自前 features を加える時は **OOF で必ず CV を測定し** karnakbaev blend と比較してから submit (= 今回 subagent A が CV 取らず submit したのが根本原因) |
+| exp005 | (no 自前 CV) | 10.317 | n/a | karnakbaev artifacts blend + live test FE。karnakbaev 公表 OOF ≈ 10.78 → LB **10.317 (= -0.467 ft、LB が OOF より良い**、live test FE が effective)。**仮説**: karnakbaev 元 OOF は固定 fold、test predictions が improve したのは feature engineering 部分。自前 CV を取らずに submit したため、improve の本当の幅は不明 |
+| exp006 | (no 自前 CV) | 10.503 | n/a | TabICL phase failure → karnakbaev 5-base NM blend fallback。LB 10.503 は exp005 (10.317) より +0.186 悪化、原因仮説 = Ridge re-fit が NM blend より劣化 (Ridge OOF 不在で確定不能)。**教訓**: fallback path も含めて自前 OOF を取る design に |
+| **exp007** | **Ridge 9-stk OOF 10.3874** ⚠️ fold-misalign | _PENDING_ | TBD | Ridge weights: kb-side total 0.620 + 自前 total 0.380、`lgb_own2=0.000` (完全除外)、主要 `lgb2(kb)=0.224 / cb_own=0.227 / xgb(kb)=0.212`。**⚠️ fold alignment 問題**: `kb_oof_q is karnakbaev train-set predict (not true OOF), Edge Q fold とは partition 異なる`。Ridge meta input が fold-misaligned で **Ridge OOF が optimistic biased 可能性**。LB が 10.5-10.7 帯まで悪化するリスクあり |
 | exp005 | (no 自前 CV) | _PENDING_ | TBD | karnakbaev artifacts は OOF 既知 (= 約 10.78)、自前 CV 取らずに test pred 直接生成 |
 
 > CV-LB diff > 0.5 ft → overfit 警戒。Sub 確定時 (Phase 6) は CV best と LB best の **両方** を Sub 1/2 に選択。
 > 今回 exp002 の diff +0.875 は **CV 戦略の見直し signal**。`src/rogii/cv.py` を typewell content-hash groups で再設計 (subagent G が `1bb6caf feat(cv): typewell content-hash groups + data-spec TVT definition` で着手済)。
+
+## CV-LB Trend 観察 (= 2026-05-11 整理、ユーザー指摘 "CV と LB の改善傾向が合致しているかチェックすべき" への応答)
+
+### 1. 現状の systemic 欠陥
+
+- **exp005 / exp006** = 自前 CV を取らず blind submit (= karnakbaev published OOF のみ参照、自前 4 base なし)
+- **exp003** = blind submit 大失敗 (LB 17.510)
+- **exp007** = 自前 CV (Ridge OOF 10.3874) を取れたが **fold-misaligned** (= karnakbaev OOF と Edge Q fold の partition 不一致) → optimistic bias 可能性
+- **exp008 v2 / exp009 v2** = Kaggle 上で v2 run 中、CV は kernel log を待つ
+
+### 2. trend 観察 (= 改善が CV / LB で integer か)
+
+| from | to | CV 改善 | LB 改善 | 一致? |
+|---|---|---|---|---|
+| exp002 baseline | exp003 自前 tysig 単独 | 不明 (CV 計測なし) | -2.815 (悪化) | n/a (CV 不明) |
+| exp002 baseline | exp005 karnakbaev blend | n/a (karnakbaev OOF base 既知 10.78、自前 CV なし) | +4.378 (-14.695 → -10.317) | n/a (CV 不明) |
+| exp005 | exp006 +TabICL | n/a (CV 不明) | -0.186 (悪化) | n/a (CV 不明) |
+| exp005 | exp007 +Edge Q+M | Ridge OOF 10.3874 (vs karnakbaev OOF 10.78、-0.39 改善) | TBD (PENDING) | 判定不能 |
+
+= **明確な「CV と LB の trend 一致性」を測定できていない** ⇒ **明日 reset 後の submit 前に必ず自前 CV を測定する仕組み必要**。
+
+### 3. CV gating ルール (= submit 前必須チェック、明日適用)
+
+submit 直前に以下を全て **PASS** することを要件化:
+
+1. **Ridge OOF RMSE が前回 best より良い (= 低い)** — 明日の exp008 v2 は OOF ≤ 10.3874 でないと submit しない、exp009 v2 は OOF ≤ exp008 v2 OOF でないと submit しない
+2. **fold alignment**: Ridge meta input の OOF が全て同一 fold partition で生成済み (= 今回 exp007 で発見した misalignment を解消した version か確認)
+3. **on-grid 比率** (Edge S): Edge S inject 済 kernel は 100% on-grid を達成しているか
+4. **submission.csv sanity**: id 全一致、NaN 0、tvt range 物理的に妥当 (= last_known_TVT 周辺)、unique tvt count 約 30-70% 削減 (Edge S 動作確認)
+
+これらを **kernel log から自動抽出**するスクリプトを後段で書く案あり。
+
+### 4. exp007 fold-misalignment の影響推定
+
+karnakbaev published OOF は karnakbaev の元 5-fold で生成 (= 各 sample は karnakbaev's val fold で predict)。Edge Q fold とは partition が異なるため、Ridge meta input の各 row で:
+- 自前 4 base OOF = Edge Q val fold (= 真の OOF)
+- karnakbaev 5 base OOF = 元 karnakbaev val fold (= 真の OOF だが partition 違い)
+
+Ridge meta は両者を **同じ row index** で fit。同じ row でも fold が異なる = 自前 base の val fold partition が karnakbaev base の **train fold** と部分的に重なる場合、karnakbaev base はその row で **train data として fit** されている → **leak**。
+
+影響量: Ridge weights を見ると kb-side 0.620 (= dominant)。kb side が leak 込みなら Ridge OOF は **真の OOF より optimistic** で、LB が悪化する。
+
+定量推定: Edge Q fold (5-fold) vs karnakbaev fold (5-fold) の重複率 = 1/5 = 20% → leak 影響 ~0.2 × kb weight 0.62 ≈ **+0.12 ft 程度の overestimate** → 実 LB は Ridge OOF 10.3874 + 0.12 ≈ **10.5 帯予想**。
+
+### 5. 解消 path (= exp008 v2 / exp009 v2 で確認)
+
+subagent L (exp008) + subagent M (exp009) は同じ karnakbaev OOF 取り扱いを継承しているため、**両者とも同じ fold-misalignment 問題を抱える**。これを解消するには:
+
+- (a) **karnakbaev pretrained を Edge Q fold で 真の OOF 再生成** (= 各 fold の train side で karnakbaev を re-fit → val side で predict)、subagent K が "deferred to v2" と note 済み。runtime 30+ min/fold × 5 fold = 2-3 hr 追加
+- (b) **karnakbaev OOF を Ridge meta から除外**、自前 4 base のみ Ridge meta、karnakbaev は別途 simple average で blend
+- (c) **GroupKFold (well_id) で再 align** (= karnakbaev original fold に戻す、Edge Q 効果は捨てる)
+
+選択軸 = (a) 計算コスト大 / (b) Edge Q 効果分離可能 / (c) Edge Q 効果を諦める。判断は exp007 LB 結果次第。
 
 ## Submit quota 管理
 
