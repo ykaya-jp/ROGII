@@ -1,7 +1,16 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # ROGII exp008 — Edge Q + Edge M + 案 D (AR(1) Kalman on dTVT) + 自前 LGB×3+CB (LB target: 9.0-9.4 帯)
+# # ROGII exp008 v3 — Edge Q + Edge M + 案 D (AR(1) Kalman) + 自前 (Huber loss + heteroscedastic sample weight + multi-seed MEDIAN ensemble) + path b blend (LB target: 8.7-9.0 帯)
+# #
+# # Phase 5 (v3) layers on top of v2:
+# #   - Huber loss (Huber 1964) on LGB + CB, replacing RMSE (fat-tail noise: dtvt_p95/std=2.4).
+# #   - Heteroscedastic sample_weight w_i = 1/sigma_w(i) from per-well-stats.parquet
+# #     b_well_resid_std (n=773 wells), clipped to [0.5, 2.0], normalised to mean 1.
+# #   - Multi-seed MEDIAN ensemble (Vandewiele 2021): LGB lr=0.05 × 3 seed (42,123,2024)
+# #     + CB lr=0.05 × 3 seed × 5 fold = 30 train runs, MEDIAN aggregated to 2 own bases.
+# #   - path b stacking: kb-side simple-average (5 base) blended with own-side Ridge
+# #     via 1D grid search w_kb ∈ [0, 1], avoids fold-misalignment leak of v2 9-base Ridge.
 #
 # Self-contained Kaggle GPU script that extends exp007 with:
 #   0. **Phase 4 first independent edge — 案 D (AR(1) Kalman / PF on dTVT)**

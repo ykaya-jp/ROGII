@@ -1,7 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # ROGII exp009 — Case E (Sparse GP for formation posterior) + Edge O (dir-aware Beam) + Edge D Kalman + Edge Q + Edge M + 自前 LGB×3+CB (LB target: 8.2-8.8 帯)
+# # ROGII exp009 v3 — Case E (Sparse GP) + Edge O (dir-aware Beam) + Edge D Kalman + Edge Q + Edge M + 自前 (Huber loss + heteroscedastic sample weight + multi-seed MEDIAN ensemble) + path b blend (LB target: 8.2-8.5 帯)
+# #
+# # Phase 5 (v3) layers on top of v2:
+# #   - Huber loss (Huber 1964) on LGB + CB, replacing RMSE.
+# #   - Heteroscedastic sample_weight w_i = 1/sigma_w(i) from per-well-stats.parquet.
+# #   - Multi-seed MEDIAN ensemble (Vandewiele 2021): 2 model × 3 seed × 5 fold = 30 runs.
+# #   - path b stacking: kb simple-avg + own Ridge + 1D grid blend, avoids fold-misalign leak.
 #
 # Self-contained Kaggle GPU script that extends exp008 with:
 #   0a. **Phase 4 second-layer independent edge — 案 E (Sparse GP for formation
