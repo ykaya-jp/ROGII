@@ -170,9 +170,28 @@ karnakbaev artifacts blend の test pred が既に grid 化されている可能
 
 | 順 | kernel | push 結果 | 備考 |
 |---|---|---|---|
-| 1 | exp005 v2 | **成功** | CPU, `KernelWorkerStatus.RUNNING` 移行確認 |
-| 2 | exp008 v2 | **成功** | GPU, `KernelWorkerStatus.RUNNING` 移行確認 |
+| 1 | exp005 v2 | **成功 → COMPLETE** | CPU, **本番 run で Edge S 完全動作確認** |
+| 2 | exp008 v2 | **成功** | GPU, RUNNING (= 自前 LGB×3+CB 学習中) |
 | 3 | exp009 v2 | **保留** | GPU 2 上限到達 (= exp008 v2 + exp009 v1 占有)。exp008 か exp009 v1 完了後に retry 必要 |
+
+### 7.1.1 exp005 v2 の本番実証 (= 14,151 rows on real Kaggle test)
+
+`kaggle kernels output` で submission.csv + log 取得して確認:
+
+| 項目 | 実測値 | 備考 |
+|---|---|---|
+| rows | 14,151 | sample_submission と一致 |
+| unique tvt | **4,735** | = 1/3 に圧縮、実 test pred が grid 近傍に集中している証拠 |
+| diff abs mean | **0.002496 ft** | 理論 0.0025 とほぼ一致 |
+| diff abs max | **0.005000 ft** | 理論最大値 |
+| on-grid ratio | **100.0%** | 全 14,151 rows が 0.01 grid に snap 完了 |
+| tvt sample | `11747.37, 11747.37, 11747.36, ...` | 0.01 ft 階段関数を可視確認 |
+
+**重要**: dummy smoke (= unique 13,659 / 14,151 = 96.5%) と比べて、
+実 test pred は **unique 4,735 / 14,151 = 33%** で大きく圧縮されている。
+これは exp005 の上流 (= karnakbaev artifacts blend + SG smooth + fade-in)
+が既に **隣接 rows で同じ予測値を返す傾向**にあることを示す。
+Edge S はこの上で残った微小な off-grid 偏差を完全に除去している。
 
 ### 7.2 exp009 v2 retry 方針
 
