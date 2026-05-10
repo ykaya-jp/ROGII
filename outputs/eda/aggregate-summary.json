@@ -1,0 +1,106 @@
+{
+  "train": {
+    "n_wells": 773,
+    "MD_step_modal_unique": [
+      [
+        1.0,
+        773
+      ]
+    ],
+    "MD_step_max_max": 1.0,
+    "MD_step_min_min": 1.0,
+    "n_rows_min": 2058,
+    "n_rows_max": 12141,
+    "n_rows_p50": 6576,
+    "n_rows_p95": 8614,
+    "visible_ratio_min": 0.12483516483516484,
+    "visible_ratio_max": 0.8022351797862002,
+    "visible_ratio_p50": 0.2600089299002828,
+    "visible_ratio_p25": 0.2245381335859782,
+    "visible_ratio_p75": 0.29965576592082616,
+    "wells_with_eval_zone": 773,
+    "wells_with_trailing_hidden_only": 773,
+    "wells_with_visible_runs_gt_1": 0,
+    "wells_with_hidden_runs_gt_1": 0,
+    "wells_zero_hidden": 0,
+    "GR_mean_min": 37.154960243973576,
+    "GR_mean_max": 130.52726394702893,
+    "GR_mean_p50": 86.60343591460861,
+    "GR_std_p50": 17.297332518955002,
+    "typewell_n_rows_min": 636,
+    "typewell_n_rows_max": 10043,
+    "typewell_n_rows_p50": 1874,
+    "typewell_TVT_step_modal_unique": [
+      [
+        0.5,
+        653
+      ],
+      [
+        0.2,
+        91
+      ],
+      [
+        1.0,
+        21
+      ],
+      [
+        0.1,
+        8
+      ]
+    ],
+    "Z_range_p50": 787.3299999999999,
+    "Z_range_p95": 1069.0220000000002,
+    "TVT_min_min": 9245.19,
+    "TVT_max_max": 12893.89,
+    "TVT_range_p50": 758.2199999999993,
+    "TVT_range_p95": 996.9840000000007,
+    "TVT_input_eq_TVT_on_visible_all_wells": true,
+    "typewell_covers_horizontal_tvt_count": 760,
+    "typewell_geology_n_labeled_p50": 1182,
+    "typewell_geology_n_labeled_min": 434,
+    "typewell_geology_n_labeled_max": 6339,
+    "typewell_geology_unique_count_p50": 6,
+    "typewell_geology_unique_count_min": 4,
+    "typewell_geology_unique_count_max": 21
+  },
+  "test": {
+    "n_wells": 3,
+    "MD_step_modal_unique": [
+      [
+        1.0,
+        3
+      ]
+    ],
+    "MD_step_max_max": 1.0,
+    "MD_step_min_min": 1.0,
+    "n_rows_min": 5278,
+    "n_rows_max": 7559,
+    "n_rows_p50": 6384,
+    "n_rows_p95": 7441,
+    "visible_ratio_min": 0.20439211535917448,
+    "visible_ratio_max": 0.32628446115288223,
+    "visible_ratio_p50": 0.27320954907161804,
+    "visible_ratio_p25": 0.23880083221539627,
+    "visible_ratio_p75": 0.29974700511225016,
+    "wells_with_eval_zone": 3,
+    "wells_with_trailing_hidden_only": 3,
+    "wells_with_visible_runs_gt_1": 0,
+    "wells_with_hidden_runs_gt_1": 0,
+    "wells_zero_hidden": 0,
+    "GR_mean_min": 53.64242097598476,
+    "GR_mean_max": 94.43696140864859,
+    "GR_mean_p50": 88.2551063050085,
+    "GR_std_p50": 18.627492583895215,
+    "typewell_n_rows_min": 1296,
+    "typewell_n_rows_max": 2556,
+    "typewell_n_rows_p50": 1946,
+    "typewell_TVT_step_modal_unique": [
+      [
+        0.5,
+        3
+      ]
+    ],
+    "Z_range_p50": 746.2199999999993,
+    "Z_range_p95": 958.6919999999992
+  }
+}

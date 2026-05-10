@@ -230,6 +230,7 @@ outputs/oof/*
 outputs/preds/*
 outputs/models/*
 outputs/logs/*
+outputs/eda/per-well-stats.parquet
 !outputs/*/.gitkeep
 
 # Submissions — keep CSV but ignore generated artifacts

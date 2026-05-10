@@ -1,104 +1,144 @@
-# データ仕様 (確定情報) — 2026-05-10 bootstrap 段階
+# データ仕様 — Phase 1 EDA 確定版 (2026-05-10)
 
-> このファイルは Phase 0 (bootstrap) で実データを展開し、`000d7d20` 1 wells のみで確認した内容。**Phase 1 で全 wells 統計を取り直して書き換える**こと。
-> 出典: `data/raw/{train,test}/*.csv` を直接読んだ結果 (出力は `notebooks/00_eda.ipynb` に再現)。
+> Phase 1 EDA で全 776 wells (773 train + 3 test sample) を集計した結果。
+> スクリプト: `src/rogii/eda.py` (`uv run python -m rogii.eda` で再現可能)
+> 生成物: `outputs/eda/aggregate-summary.json`, `outputs/eda/per-well-stats.parquet` (776 rows)
 
-## 1. ファイル構成
+## 1. 形状の確定
 
-- `data/raw/`
-  - `sample_submission.csv` — 14151 rows, columns: `id, tvt`. id format: `{8charhash}_{row_index}`
-  - `train/` — `{HASH}__horizontal_well.csv`, `{HASH}__typewell.csv`, `{HASH}.png` の 3 ファイル/well
-  - `test/` — 同上構成。**展開時点では sample 3 wells のみ** (`000d7d20`, `00bbac68`, `00e12e8b`)。本番リーダーボード時に約 200 wells に置き換わる
-  - `AI_wellbore_geology_prediction_task_en.pptx` — 主催者提供の task 説明スライド (要レビュー)
+### MD step
 
-## 2. wells 数 (確定)
+- **全 776 wells で MD step = 1.0 ft 完全統一** (`MD_step_modal_unique = [(1.0, 773)]` for train, `[(1.0, 3)]` for test)
+- 含意: **regular grid sequence model が成立**。resampling 不要
 
-- **train wells: 773** (`ls data/raw/train/*__horizontal_well.csv | wc -l`)
-- **test wells (sample): 3** — 本番では約 200 wells (Kaggle Overview より)
+### well 長 (`n_rows` = lateral 区間 ft 数)
 
-## 3. horizontal_well の columns
+| split | min | p50 | p95 | max |
+|---|---|---|---|---|
+| train | 2058 | **6576** | 8614 | 12141 |
+| test  | 5278 | 6384 | 7441 | 7559 |
 
-### train 側 (13 columns)
+- 含意: 案 B Sequence Transformer の patch サイズは **128 ft 〜 256 ft** が妥当 (= p50 6576 を 25-50 patch に分割)
 
-```
-MD, X, Y, Z, ANCC, ASTNU, ASTNL, EGFDU, EGFDL, BUDA, TVT, GR, TVT_input
-```
+### 評価 zone 構造 ★ 全 wells 統一
 
-### test 側 (6 columns) — train から **`ANCC, ASTNU, ASTNL, EGFDU, EGFDL, BUDA, TVT` の 7 列が削除**
+- **`wells_with_trailing_hidden_only`: 773 / 773 (100%)**
+- **`wells_with_visible_runs_gt_1`: 0**, **`wells_with_hidden_runs_gt_1`: 0**
+- ⇒ 全 wells で **「visible 1 ブロック → hidden 1 ブロック (末端まで)」** の単純パターン
+- 含意:
+  - CV 設計は「**well 内の終盤を hidden 模倣**」で OK (各 well で末端 ~75% を mask して訓練)
+  - GroupKFold by well_id だけでは不十分。**well 内マスク** も併用
 
-```
-MD, X, Y, Z, GR, TVT_input
-```
+### visible 比率
 
-> **重要含意**: `ANCC/ASTNU/ASTNL/EGFDU/EGFDL/BUDA` (formation depth feature) は **train only**。これらに依存する model は test 推論時に再現できないため、特徴量として直接使うことは禁止。ただし train 時の **auxiliary supervision target** としては使える (multi-task で formation depth も予測させ、main task の representation を richer にする)。
+| split | min | p25 | p50 | p75 | max |
+|---|---|---|---|---|---|
+| train | 0.125 | 0.225 | **0.260** | 0.300 | 0.802 |
+| test  | 0.204 | 0.239 | 0.273 | 0.300 | 0.326 |
 
-## 4. typewell の columns
+- 含意:
+  - **約 1/4 (visible) で 3/4 (hidden) を予測** する超 extrapolation 課題
+  - 案 C plane fit は **visible 25% (= lateral 前半)** で fit → 残り 75% に外挿。前半が短いほど extrapolation 誤差が累積
+  - 案 B Transformer も visible 部分が短いので **typewell との cross-attention** が決め手
 
-### train 側 (3 columns)
+## 2. TVT 値域 (train, target 列)
 
-```
-TVT, GR, Geology
-```
+- TVT min: **9245.19** ft
+- TVT max: **12893.89** ft
+- per-well TVT range: p50 **758 ft**, p95 997 ft (1 well 内で TVT は ~800 ft 動く)
+- visible 区間で **TVT_input == TVT (全 773 wells で True 検証済み)** ⇒ TVT_input は visible 部の正解 TVT そのもの
 
-`Geology` 例: 空欄 (NaN) が混在。確認: `head -3 data/raw/train/000d7d20__typewell.csv` ⇒ 最初 2 行は Geology=空。
+> 含意: 公開 LB 12.602 = TVT 平均 11000 ft に対する **相対誤差 0.114%**。1 位は更に小さい誤差勝負。Plan の「LB 5-8 帯目標」は TVT スケールから見て妥当 (相対誤差 0.05-0.07%)。
 
-### test 側 (2 columns) — `Geology` 列が削除
+## 3. typewell の解像度差 ★
 
-```
-TVT, GR
-```
-
-> **重要含意**: typewell は **test 側でも与えられる** ⇒ 案 B (Cross-Attention to typewell) と案 C (DTW well-tie) の前提は成立。
-> ただし **`Geology` label は test では無い** ⇒ Plan の案 B `Multi-task: TVT + ΔTVT + Geology label aux` の Geology 部は train 時の auxiliary supervision には使えても、test 推論時に必要な入力にはできない。設計修正必要。
-
-## 5. 評価 zone (1 well のみ確認、`000d7d20`)
-
-- **horizontal_well rows**: 5278 (MD 11467.0 〜 16744.0, step = 1.0 ft 確認)
-- **TVT_input visible**: 1442 rows (MD 11467 〜 12908)
-- **TVT_input NaN (= eval zone)**: 3836 rows (MD 12909 〜 16744) ← lateral 全長の **後半 73%**
-- 評価 zone は **lateral の後半連続 hidden** という構造
-- sample_submission の 3 wells も同様: 3836 + 6014 + 4301 = 14151 rows = 各 wells の hidden zone を全部足したもの
-
-> **重要含意**:
-> 1. CV 設計: 訓練時に visible 区間で学習 → hidden 区間 (= MD 後半) を予測する pattern を再現する **leave-one-well-out + 後半 mask CV** を組む。GroupKFold by well_id 単独では不十分。well 内の visible/hidden 分割が test 構造に整合する必要あり。
-> 2. 案 C (Plane fit + residual ML) の Plane fit は **visible 区間 = lateral 前半 27%** で計算 → 後半に外挿する形になる。前半が短いほど extrapolation 誤差が累積する。
-> 3. TVT_input は **後半全部 NaN**。可視化されているのは前半だけ。これに過剰依存すると hidden zone で破綻する。
-
-## 6. TVT 値域 (1 well のみ確認、`000d7d20`)
-
-- TVT 最小値: 11236.02 (MD 11467 時点)
-- TVT は MD と同じスケール (10000ft オーダー)。MD と TVT のスケール感を踏まえると **公開 LB baseline RMSE 12.602 ft は TVT 値の 0.1% 誤差程度**
-
-> **重要含意**: Plan で「LB 5-8 帯を最終目標」と書いたが、絶対値 5-8 ft というのは TVT 11000ft オーダーに対し相対誤差 0.05-0.07% の世界。改善の余地は数 ft 単位の精度勝負。差別化は微小な精度の積み上げが効く。Phase 1 で全 wells の TVT 値域分布を確認したうえで再校正する。
-
-## 7. id format
-
-- `{WELLNAME}_{row_index}`
-- 例: `000d7d20_1442` → well `000d7d20`, row index 1442 (0-origin で hidden zone の最初の行に対応 = MD 12909.0)
-
-## 8. Phase 1 EDA で必ず確認する項目
-
-Bootstrap 段階で 1 wells (`000d7d20`) だけ見たので、全 train wells / 全 test sample wells で以下を統計的に検証する:
-
-1. ✅ MD step は **常に 1.0 ft** か (train/test 全 wells で一定か検証)
-2. ✅ 評価 zone は **常に lateral 後半連続** か (途中に visible が挟まる pattern が無いか)
-3. visible 区間の長さ分布 (well ごとの最初の MD カウント比率)
-4. TVT 値域分布 (TVT min / max / range / std を well ごとに集計)
-5. GR スケール統一性 (well ごとの mean/std/min/max を箱ひげで)
-6. typewell の TVT 範囲が horizontal の TVT 範囲をカバーしているか
-7. Geology label の出現頻度 (train typewell のみ)
-8. trajectory の dip/azimuth/dogleg 分布
-
-## 9. Plan へのフィードバック (修正候補)
-
-Phase 0 で得られた事実から Plan を以下のように修正したい:
-
-| 修正点 | 元 plan | 新 plan |
+| typewell TVT step | wells | 比率 |
 |---|---|---|
-| 案 B の aux task | "Multi-task: TVT + ΔTVT + Geology label aux" | Geology label は **train typewell からのみ pretext / aux supervision**。test 推論時には不要 (= forward pass で Geology head を捨てる) |
-| 案 C で使う visible 区間 | "visible TVT_input の最小二乗 plane fit" | visible = lateral 前半 27% のみという前提を明示。**plane fit の信頼区間** を考慮した extrapolation 誤差を Phase 1 で実測 |
-| CV 戦略 | "GroupKFold by well_id, 10-fold" | well_id GroupKFold + **well 内の後半 mask 模倣** の組み合わせに変更。hold-out well の visible 部だけを学習し、hidden 部で評価 |
-| Risk 1 (データ仕様の誤読) | 想定していた | `ANCC/ASTNU/...` が test で無いこと、Geology が test typewell に無いことは Phase 0 で確認済み。Risk 1 をクローズ |
-| 期待 LB 校正 | "LB 5-8 帯" | TVT 値域 (10000ft オーダー) を踏まえて Phase 1 で再校正 |
+| **0.5 ft** | 653 | **84.5%** |
+| 0.2 ft | 91 | 11.8% |
+| 1.0 ft | 21 | 2.7% |
+| 0.1 ft | 8 | 1.0% |
 
-> Plan 本体 (`docs/strategy/winning-strategy.dense.md` および `~/.claude/plans/rogii-wellbore-geology-modular-shannon.md`) を Phase 1 完了時に上記反映で更新する。
+- horizontal は 1.0 ft step、typewell の 84.5% は 0.5 ft step ⇒ **typewell 側を 1.0 ft に resample (downsample) が必要**
+- typewell `n_rows`: p50 1874 → 約 940 ft の縦深 (0.5 step 仮定)、最大 10043 (= 5000 ft の長い縦穴も)
+
+## 4. typewell カバレッジ ★
+
+- **typewell が horizontal の TVT 範囲を完全カバー: 760 / 773 (98.3%)**
+- 13 wells (1.7%) で horizontal が typewell の TVT 範囲外側に出る ⇒ extrapolation edge case
+- 含意: 案 B/C は edge case の 1.7% で精度低下。**案 A (typewell 非依存) との blend** で底上げ
+
+## 5. typewell の Geology label 分布 (train のみ。test 側 typewell に Geology 列無し)
+
+| 指標 | min | p50 | max |
+|---|---|---|---|
+| `typewell_geology_unique_count` (label 種類) | 4 | **6** | 21 |
+| `typewell_geology_n_labeled` (label 付き行数) | 434 | 1182 | 6339 |
+
+- 含意:
+  - 案 B aux task の Geology classification は **6 layer median** で扱う
+  - test 側で Geology 列が無いので、**train 時の auxiliary supervision 専用**。test 推論時は forward pass で Geology head を捨てる
+  - 21 layer wells (max) は最大 class 数として preserve するか、希少 class を merge するか別途検討
+
+## 6. GR (Gamma Ray) 正規化 ★
+
+- GR_mean range (well 間): **37 〜 130** ⇒ **3.5 倍の差**
+- GR_std (median): 17.3
+- 含意:
+  - well 間で **必ず正規化** (z-score / robust scaler)
+  - well ごとの absolute GR 値比較は無意味
+  - typewell GR と horizontal GR の比較も well 内で正規化してからやる
+
+## 7. trajectory (vertical extent)
+
+- Z_range (well 内): p50 **787 ft**, p95 1069 ft
+- horizontal でも Z 方向に 800 ft 動く ⇒ 完全水平ではなく deviation あり
+- 含意: trajectory derivative (dip, azimuth, dogleg) は十分 informative な特徴量になる
+
+## 8. column 定義 (train / test 差分)
+
+### `__horizontal_well.csv`
+
+| 列 | train | test | 用途 |
+|---|---|---|---|
+| `MD` | ✓ | ✓ | 測長深度 |
+| `X` `Y` `Z` | ✓ | ✓ | 3D 座標 |
+| `GR` | ✓ | ✓ | Gamma Ray |
+| `TVT_input` | ✓ | ✓ | 部分マスク TVT (visible 部のみ非 NaN) |
+| `TVT` | ✓ | ✗ | **target (train only)** |
+| `ANCC` `ASTNU` `ASTNL` `EGFDU` `EGFDL` `BUDA` | ✓ | ✗ | 各地層の predicted depth (**train only**) — 直接特徴量化禁止、ただし aux supervision には使える |
+
+### `__typewell.csv`
+
+| 列 | train | test | 用途 |
+|---|---|---|---|
+| `TVT` | ✓ | ✓ | 縦穴の depth index |
+| `GR` | ✓ | ✓ | 縦穴 GR signature |
+| `Geology` | ✓ | ✗ | layer label (**train only**) |
+
+## 9. id format
+
+- `{WELLNAME}_{row_index}` (8 文字 hash + underscore + 整数)
+- 例: `000d7d20_1442` → well `000d7d20`, row index 1442 (= hidden zone 内の最初の行 = MD 12909.0)
+- sample_submission の id は **hidden zone 内の行のみ**
+
+## 10. Plan への反映 (確定版、Plan を別途更新する)
+
+| 修正点 | 元 plan の表現 | 新 plan の表現 |
+|---|---|---|
+| MD step | 「1 ft step 想定」 | **全 wells で 1.0 ft 完全統一** 確定 |
+| 評価 zone 構造 | 「中央? 末端?」 | **全 wells trailing hidden only** 確定 |
+| visible 比率 | 不明 | **median 26%** 確定 (= 残り 74% を予測) |
+| typewell 解像度 | 不明 | **0.5 ft step が 84.5%** ⇒ resample to 1.0 ft 必須 |
+| TVT 値域 | 不明 | **9245-12894 ft** ⇒ LB 5-8 ft 目標は相対誤差 0.05% 妥当 |
+| GR 正規化 | 言及無し | **必須** (well 間で 3.5 倍差) |
+| typewell カバレッジ | 不明 | **98.3% カバー、1.7% (13 wells) は edge case** |
+| Geology 列 | aux | train 時のみ aux supervision、6 layer median |
+| `ANCC/ASTNU/EGFDU/EGFDL/BUDA` | train only と仮定 | **確定**: test では無し ⇒ 直接特徴禁止、train 時 aux supervision としては使用可 |
+| CV 戦略 | GroupKFold | **GroupKFold by well_id + 各 well 内で末端 visible_ratio (= median 74%) を hidden 模倣** |
+
+## 11. 詳細データ
+
+- per-well 統計の全カラム: `outputs/eda/per-well-stats.parquet` (776 rows × 35 cols)
+- 横断統計: `outputs/eda/aggregate-summary.json`
+- スクリプト: `src/rogii/eda.py`

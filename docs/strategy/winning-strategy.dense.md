@@ -2,6 +2,21 @@
 
 > このファイルは `/home/yusuke_kaya/.claude/plans/rogii-wellbore-geology-modular-shannon.md` の repo 内コピー (origin)。両者は同じ内容を保つこと (片方を編集したらもう片方も追従させる)。harness 側は plan 一覧管理用、repo 側は実装中の参照用。
 
+## Phase 1 確定情報 (2026-05-10 EDA 結果)
+
+> 全 776 wells (773 train + 3 test sample) を `src/rogii/eda.py` で集計済み。詳細は [`docs/research/data-spec.dense.md`](../research/data-spec.dense.md) 参照。Plan の数値前提はこの結果で確定:
+>
+> - **MD step = 1.0 ft 完全統一** (全 776 wells)
+> - **評価 zone = trailing hidden only** (全 wells で「visible 1 ブロック → hidden 1 ブロック (末端まで)」の単純パターン)
+> - **visible 比率 median 26%** (1/4 visible で 3/4 hidden を予測する超 extrapolation 課題)
+> - **TVT 値域 9245-12894 ft** (LB 12.6 = 相対誤差 0.114%)
+> - **typewell 解像度 0.5 ft が 84.5%** ⇒ 1.0 ft に resample 必須
+> - **typewell カバレッジ 98.3%** (13 wells が edge case)
+> - **GR は well 間 3.5 倍差** ⇒ 必須正規化 (z-score)
+> - **`ANCC/ASTNU/EGFDU/EGFDL/BUDA` test では無し** ⇒ 特徴量化禁止、train 時 aux supervision のみ
+> - **typewell `Geology` も test では無し** ⇒ aux supervision のみ
+> - **CV 戦略**: GroupKFold by well_id + 各 well 内で末端 ~74% を hidden 模倣
+
 ## Context (なぜこの plan を書くか)
 
 - Kaggle コンペ **ROGII - Wellbore Geology Prediction** (https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction) に参戦する
