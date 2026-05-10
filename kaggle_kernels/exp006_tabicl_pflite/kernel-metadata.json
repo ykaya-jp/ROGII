@@ -1,0 +1,17 @@
+{
+  "id": "ky7240/rogii-exp006-tabicl-pflite",
+  "title": "ROGII exp006 TabICL PFlite",
+  "code_file": "exp006_tabicl_pflite.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_tpu": "false",
+  "enable_internet": "false",
+  "dataset_sources": [
+    "karnakbaevarthur/rogii-code-helper-dataset",
+    "thermostatic/rogii-tabicl-v2-public-assets"
+  ],
+  "competition_sources": ["rogii-wellbore-geology-prediction"],
+  "kernel_sources": []
+}
