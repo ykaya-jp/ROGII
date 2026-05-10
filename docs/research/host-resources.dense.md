@@ -98,32 +98,66 @@ Columns 確定:
 
 ## 2. YouTube transcript (`gdK_eY5_QrE`, 0:00-6:36) ハイライト
 
-> ROGII 社の geosteering ソフトウェアの操作 tutorial。前半 (0:00-2:00) は「typewell referenced project の load」「mode 切替で geosteering に入る」など UI 操作。
-> 中盤 (2:00-4:30) で **segment-based interpretation** の概念が出る (= piece-wise DTW の物理対応物)。
-> 重要箇所のみ抽出。
+> ROGII 社の geosteering ソフトウェアの操作 tutorial。全 396s, 6037 chars。
+> ML 戦略への含意は **segment-based stretch/squeeze** が human alignment の本質という発見 (= piece-wise DTW + dip 推定の物理的根拠)。
+> 全文: `data/external/host-resources/youtube-gdK_eY5_QrE-transcript.txt`
 
-### 0:00-1:00 (intro)
-- 前 video で「typewell referenced our project」「horizons を作った」とあるので、本動画は **horizon 設定後の interpretation step**
-- "horizons" = typewell から推定した layer top の MD-TVT pairs
+### 2.1 0:00-1:00 (intro): horizon 概念
+- 前動画で「typewell referenced project」「**horizons**」を作成済 → 本動画は horizon 設定後の interpretation step
+- **"horizons"** = typewell から推定した layer top の MD-TVT pairs (= 既存 docs の formation top に相当)
 
-### 1:00-2:30 (segment 概念)
-- **「we haven't broken our data into smaller segments so we have one single orange segment」**
-- = 初期状態は lateral 全体が 1 segment、interpretation 進行に従って segment を分割していく
-- → discussion 697431 msg6 「piece-wise fitting DTW. model predict (start, end, dTVT/dMD slope) for each segment」と完全一致
-- **blue line** = active segment の **start** (= 過去の interpretation start)
+### 2.2 1:00-2:30 (segment 概念): blue/green line
+- 初期状態は lateral 全体が **1 single orange segment**、interpretation で segment を細分化
+- **blue line** = active segment の **start** (= interpretation start)
 - **green line** = active segment の **end / new segment 作成 trigger**
+- segment は active=red、inactive=別色で可視化
 
-> **含意**: ROGII 社の human geosteering workflow が **segment-based piece-wise alignment** を取っているなら、**segment 検出 (= TVT 増減方向の切替点検出)** を予測する補助タスクが有効。
-> - subtask 案: 「PS 以降の hidden zone を **K segments に分割**、各 segment で `(start MD, end MD, dTVT/dMD slope)` を予測」(= hengck23 提案 msg6 の実装ガイド)
+### 2.3 2:30-4:00 (★ stretch / squeeze = dip 推定の本質)
 
-### 2:30-4:00 (interpretation 操作)
-- "if I move that blue line ... more data populate on the vertical track" → segment start を動かすと typewell vertical track の対応範囲が変わる UI 動作
-- "if I move my green line I will create a new segment"
-- → これは **interactive geosteering**: human が segment を切ったり延ばしたりして RMSE 最小化する操作。ML が代替する core process そのもの
+**「I can also move this green and blue lines within the vertical track this will change the dip as it's stretching and squeezing the data」**
 
-### 4:00-6:36 (終盤、要約は別途生 transcript 参照)
-- 詳細は `data/external/host-resources/youtube-gdK_eY5_QrE-transcript.txt` を参照
-- 重要キーワード: `horizon`, `segment`, `interpretation start`, `geosteering cross section`
+- segment 内のデータを vertical track 上で **伸ばす / 縮める** ことで dip 角度が変化
+- = **affine 変換 (TVT scale)** by per-segment factor
+- 実例: `dipped value changes next to that green line` (1:58 付近)
+
+> **含意**: human geosteering の核心は **「segment ごとに typewell vertical scale を伸縮させて MWD GR と match させる」** = **piece-wise affine TVT scale alignment**。
+> - これは pure DTW (1-to-1 monotone alignment) より自由度高く、**piece-wise linear scaling** に相当
+> - ML 実装案: `segment k で TVT_horizontal = a_k × TVT_typewell + b_k` の `(a_k, b_k)` per segment 推定。`a_k` = dip 因子, `b_k` = offset (= b_well の segment 化)
+> - discussion 697431 msg6 hengck23 「piece-wise fitting DTW. model predict (start, end, **dTVT/dMD slope**) for each segment」の **slope** = この `a_k` (= stretch ratio) と完全一致
+
+### 2.4 4:00-5:30 (★ dip の典型値: 89-91 deg)
+
+実例 transcript:
+- "I'm squeezing that data to fit at a **dip of 91.32**"
+- "I can squeeze that data up to an **89 degree**"
+- "this data is showing me that there's two different dips ... I will break this segment"
+- "I can see the peaks and troughs but they're not matching with one single bed dip"
+
+> **含意**:
+> - dip range は **89-91 deg 付近に集中** (= ほぼ horizontal、わずかな variance を当てるゲーム)
+> - **同一 segment 内で 2 つの dip 検出** = segment 細分化トリガー (= ML 側では loss が segment 内で bimodal なら break する self-adaptive segmentation)
+> - 90 deg からの偏差を直接 regress する **dip residual head** が情報的にコンパクト (`dip - 90` の per-segment 値)
+
+### 2.5 5:30-6:36 (multiple interpretations = ensemble)
+
+**「You can have as many interpretations as you'd like if you have different scenarios of your interpretation」**
+
+- 操作: right click → copy → paste で interpretation 複製 → activate して別解釈を保持
+- → human が **ensemble of interpretations** を内部で持つことを示唆
+
+> **含意**:
+> - ROGII の human ground truth (`manualTVT`) は **複数 interpretation の中から選ばれた 1 つ** = label noise 源
+> - ML 側で **multiple interpretations を陽に予測 → mixture density estimation** すれば、label noise を marginalise できる
+> - 簡易版: **N-best beam search** で K 個の hidden TVT 解を保持 → 最尤を選ぶか accumulate average
+
+### 2.6 winning strategy への 4 つの追加示唆 (transcript 全読了後)
+
+| # | 操作の本質 | ML への直接対応 |
+|---|---|---|
+| Y1 | segment 内 stretch/squeeze で **dip 因子 `a_k` を fit** | per-segment affine `TVT = a_k × typewell_TVT + b_k` 推定 |
+| Y2 | segment 細分化 trigger = **bimodal dip detection** | residual signature が bimodal な区間を切る self-adaptive segmentation |
+| Y3 | dip 89-91 deg 集中 → **`dip - 90` residual head** | per-segment scalar regression (small magnitude) |
+| Y4 | multiple interpretations = ensemble | mixture density / N-best beam の出力形式
 
 ---
 
@@ -140,16 +174,78 @@ Columns 確定:
 
 ---
 
+## 3.5 well azimuth EDA (H-T2 完了, 2026-05-10)
+
+> **再現スクリプト**: `notebooks/_typewell_groups_build.py` 隣に `data/processed/well_azimuth.parquet` を生成 (本セッションでインライン実行、773 wells 全件)
+> **生成物**: `data/processed/well_azimuth.{parquet,csv}` (gitignored、773 rows × 7 cols)
+> **方法**: visible-zone XY (`TVT_input` notna 区間) に SVD を掛け第一主軸を well 進行方向とする。同時に full-trajectory end-minus-start direction も比較計算。
+
+### 3.5.1 全体 azimuth 分布 (full lateral end-direction)
+
+| octant | wells | % |
+|---|---|---|
+| **NW** | 364 | **47%** |
+| **SE** | 279 | **36%** |
+| N | 39 | 5% |
+| S | 36 | 5% |
+| W | 31 | 4% |
+| E | 20 | 3% |
+| NE | 3 | 0% |
+| SW | 1 | 0% |
+
+- **wells の 83% (= NW + SE 合計) が NW-SE 軸上**
+- 北米 Texas Eagle Ford trend は **NW-SE strike** (北西-南東に走る帯状鉱床) → 物理的整合
+- 含意: **dip 方向 ≈ NE-SW 直交方向** (NW-SE strike の dip は 90 度回転した NE-SW 軸) → wells は dip 直交方向に lateral 進行している = PowerPoint Slide 12「azimuth は dip に影響」と整合
+
+### 3.5.2 lateral straightness (visible-zone PCA `S2/S1`)
+
+| metric | p5 | p25 | **p50** | p75 | p95 |
+|---|---|---|---|---|---|
+| `straightness_visible` | 0.005 | 0.009 | **0.015** | 0.024 | 0.053 |
+
+- 全 wells で **S2/S1 < 0.05** = 第二主軸が第一主軸の 5% 以下 → **極めて直線的**
+- 含意: lateral は基本まっすぐ、curving lateral は無い → PCA 主軸 = azimuth 推定が信頼できる
+
+### 3.5.3 ★ duplicate group 内の azimuth dispersion (= pseudo-typewell 信頼度の代理指標)
+
+13 duplicate groups (§10b) 内で azimuth の **circular std** を計算:
+
+| group_id | size | azimuth circ_std (deg) | range (deg) | 解釈 |
+|---|---|---|---|---|
+| `75cd5f11` | 2 | **0.5** | 0.9 | 同方向の隣接 lateral (= standard practice) |
+| `89f1085d` | 2 | **0.1** | 0.3 | 同上 |
+| `8b95d6d1` | 2 | **0.7** | 1.3 | 同上 |
+| `a4f989c2` | 2 | **0.5** | 0.9 | 同上 |
+| `add9c322` | 2 | 8.1 | 16.2 | ほぼ同方向 |
+| `25939962` | 2 | 12.1 | 24.0 | ほぼ同方向 |
+| `2f8e53c3` | 2 | 12.8 | 25.6 | ほぼ同方向 |
+| `02e7fe5a` | **10** | 41.8 | 357.1 | **N-S 双方向 10 lateral が 1 typewell 共有 (★ pseudo-typewell 代表例)** |
+| `b977be4a` | 2 | 105.2 | 158.7 | **方向反対** = pseudo-typewell 候補 |
+| `7b38844c` | 2 | 101.5 | 156.0 | **方向反対** = pseudo-typewell 候補 |
+| `f321a31c` | 2 | 116.1 | 194.7 | **方向反対** = pseudo-typewell 候補 |
+| `cd7f1687` | 2 | 165.7 | 181.7 | **完全反対方向** = pseudo-typewell ほぼ確定 |
+| `071d7b45` | 2 | 181.4 | 179.2 | **完全反対方向** = pseudo-typewell ほぼ確定 |
+
+- **circ_std ≤ 30 deg**: 7 groups (= 同方向の隣接 lateral pair、standard typewell sharing) → **ground truth 信頼度 = 通常並み**
+- **circ_std ≥ 100 deg**: 6 groups (= 方向反対の lateral 群、azimuth 違うのに同 typewell) → **pseudo-typewell の可能性高 = ground truth 信頼度 低**
+
+> **含意 (loss weight 自動調整)**:
+> - 既存 `typewell_groups.parquet` に **`is_pseudo_likely`** = `is_duplicate AND circ_std_within_group >= 60deg` を追加すれば、pseudo-typewell 23 wells (= 6 groups の合計、`b977be4a`+`7b38844c`+`f321a31c`+`cd7f1687`+`071d7b45` の各 2 + `02e7fe5a` の 10) を自動識別可
+> - これらに loss weight 0.5-0.7x を掛ける variant を試す価値あり
+> - exp004/005 候補: typewell_groups.parquet の v2 (azimuth dispersion 列追加) と loss-weighted variant
+
 ## 4. 次の行動 (本 doc から派生する具体タスク)
 
 | # | task | 優先度 | 配置先 |
 |---|---|---|---|
 | H-T1 | Slide 9 の「visible-as-typewell」approach を edge I として `independent-edges.dense.md` に追記 | 高 | exp004 候補 (host 公式推奨) |
-| H-T2 | well azimuth (= visible 部 XY 進行方向の主成分) を feature 化、dip 推定 prior に統合 | 高 | exp004/005 候補 |
+| H-T2 ✅ | well azimuth (= visible 部 XY 進行方向の主成分) を feature 化、dip 推定 prior に統合 — 完了 (§3.5、`data/processed/well_azimuth.parquet`) | 高 | 完了。実装側は `azimuth_visible_pca_deg` を sin/cos に展開して feature 追加 |
 | H-T3 | spatial 近傍 well を `KDTree(X, Y)` で取得 → top-k well の TVT を prior として attention 入力に | 中-高 | exp005 候補 (NN 系) |
-| H-T4 | K-segment 予測 head を Sequence Transformer (案 B) に追加 — `(start_md, end_md, dTVT/dMD slope)` × K | 中 | exp006 候補 |
+| H-T4 | per-segment affine (`a_k, b_k`) 予測 head を Sequence Transformer (案 B) に追加 — Y1 + Y2 + Y3 統合、stretch/squeeze の ML 化 | **高** | exp006 候補 (Y1-Y4 finding が直結) |
 | H-T5 | `manualTVT` label noise 耐性のため Huber loss で baseline を再 train、RMSE 比較 | 低-中 | exp003.1 等の minor variant |
-| H-T6 | YouTube transcript 残り (4:00-6:36) を読み込み、segment 操作の詳細 UI ロジックから設計示唆を追加抽出 | 低 | future |
+| H-T6 ✅ | YouTube transcript 残り (4:00-6:36) を読み込み、segment 操作の詳細 UI ロジックから設計示唆を追加抽出 — 完了 (§2.3-2.6、Y1-Y4 finding 追加) | 中 | 完了 |
+| H-T7 (新規) | `typewell_groups.parquet` v2 — azimuth dispersion 列を追加、`is_pseudo_likely` flag を計算 (§3.5.3) | 高 | exp004 candidate input |
+| H-T8 (新規) | mixture density / N-best beam の出力形式を Sequence Transformer に追加 (Y4 finding) | 中 | exp006/007 候補 |
 
 ---
 

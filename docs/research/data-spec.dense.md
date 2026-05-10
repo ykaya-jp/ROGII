@@ -193,7 +193,7 @@
   ```
 - **loss weight 候補**: `is_duplicate=True` (= pseudo-typewell の可能性が高い 34 wells) は **ground truth `manualTVT` 自体が他 lateral からの interpretation** で誤差が乗っている (PowerPoint Slide 14 = `manualTVT` は人手 interpretation) → loss を 0.7-0.8x に縮小する変種を試す価値あり (= `host-resources.dense.md` H6 と整合)
 
-### 10b.4 column 仕様 (`typewell_groups.parquet`)
+### 10b.4 column 仕様 (`typewell_groups.parquet`, v2 = 14 cols)
 
 | 列 | 型 | 説明 |
 |---|---|---|
@@ -203,6 +203,17 @@
 | `group_size` | int | 当該 hash を共有する well 数 (1, 2, または 10) |
 | `is_duplicate` | bool | `group_size > 1` |
 | `n_rows`, `tvt_min`, `tvt_max`, `has_geology` | misc | typewell content sanity 用 |
+| `azimuth_visible_pca_deg` | float | visible-zone XY trajectory の SVD 第一主軸 azimuth (degrees clockwise from north) |
+| `azimuth_full_deg` | float | full lateral end-minus-start direction の azimuth (degrees) |
+| `straightness_visible` | float | visible XY の `S2/S1`、低いほど直線的 (p50=0.015, p95=0.053) |
+| `azimuth_circ_std_deg` | float | 同 group 内の `azimuth_full_deg` の **circular std** |
+| **`is_pseudo_likely`** | bool | `is_duplicate AND azimuth_circ_std_deg >= 60deg` ⇒ 反対方向の lateral が同 typewell を共有 = pseudo-typewell の強い疑い (10 wells / 5 groups: `071d7b45`, `7b38844c`, `b977be4a`, `cd7f1687`, `f321a31c`) |
+
+### 10b.5 loss weight 自動調整 (winning strategy 接続)
+
+- `is_pseudo_likely=True` の 10 wells は ROGII `manualTVT` (= human interpretation) が **過去 lateral から伝播した interpretation** で誤差が乗っている可能性が高い
+- 推奨 variant: 該当 wells の loss weight を **0.5-0.7x** に縮小、CV/LB の感度を計測 → 効果あれば baseline に取り込み
+- 詳細出典: `docs/research/host-resources.dense.md` §3.5.3, `docs/research/independent-edges.dense.md` 案 M (visible-as-typewell との合成可能性)
 
 ## 11. 詳細データ
 

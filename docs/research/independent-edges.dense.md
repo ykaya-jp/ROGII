@@ -394,6 +394,48 @@ Sampling: reverse SDE で hidden TVT を K=20-50 samples、mean = ensemble。
 - 工数 3 日の博打 / 効果未知
 - スキップが現実的
 
+判断 6: **案 M (Visible-as-Typewell) をいつ投入するか**
+- host 公式推奨 (PowerPoint Slide 9) で実装例ゼロ → **first mover advantage** あり
+- 工数 2-3 日、案 D/E/G と直交合成可能
+- visible_ratio < 0.2 の wells (= 18% level、p10) で fallback ロジックが必須
+
+## M. 案 M — Visible-as-Typewell (host 公式推奨、2026-05-10 追加)
+
+### M.1 構造原理
+
+公開 top は **typewell GR を唯一の reference** として horizontal GR と alignment するが、本案は **visible 部 horizontal GR (PS 前) を local reference** として hidden 部 horizontal GR と self-alignment する。typewell は補助に降格し、visible-as-typewell xcorr を主信号にする。
+
+### M.2 着想根拠
+
+- **PowerPoint Slide 9 (公式)**: 「**The green GR (= PS 後 lateral GR) correlates better with the red GR (= PS 前 visible lateral GR) than with the typewell GR (black)**」「It may be better to use GR data from the horizontal well **before the PS point**, combined with deeper TVT data, to correlate the rest of the lateral」(`docs/research/host-resources.dense.md` Slide 9)
+- **物理根拠**: horizontal GR は typewell GR より高解像度 (Slide 9 明文)、かつ同 lateral 内の地質変化は連続的 → **同 well の visible/hidden GR の方が typewell との対応より素直**
+- **discussion 697431 msg11** (hengck23 の解釈): 「we want to know what is our tvt. But we have signal gr. We need to move up or down to have generate enough gr signal signature for matching reference gr」← reference gr を **typewell から visible 部に置き換え**ても同じ formulation が成立
+
+### M.3 5 軸評価
+
+| 軸 | 評価 |
+|---|---|
+| 構造原理の独自性 | **★★★** (公開 top は typewell 一択、host 公式推奨だが kernel 群で実装例ゼロ) |
+| 期待 LB 改善 | **中-高** (Slide 9 が「better than typewell」と明言、定量値は未測定だが LB -0.5 ~ -1.5 帯) |
+| 実装工数 | **2-3 日** (visible 部から GR window を取り、hidden 部 GR との local xcorr/DTW) |
+| 失敗リスク | **中** (visible 部が短い well [visible_ratio_p10=0.18] では reference 不足、hidden 末端 [md_offset > 4000] では visible との相関消失) |
+| 既存案/移植要素との合成可能性 | **高** (案 D/E/G と直交、ensemble の 1 source として加算可) |
+
+### M.4 失敗モード
+
+- visible 区間が極端に短い well (= visible_ratio < 0.2、`data-spec.dense.md` §1) では reference 信号量不足 → **typewell 主、visible 副** にフォールバック
+- horizontal の geology 変化 (formation transition) を visible が含まない場合、hidden 側で出会う未知 formation を visible reference では match できない → **typewell の Geology 列で補強** (但し test typewell は Geology 無し、topic 697857)
+- visible 末端と hidden 開始の dTVT 連続性 (= AR1 phi=0.999) を leverage する設計が必須 → 単純 sliding window xcorr では距離減衰
+
+### M.5 実装メモ (= subagent dispatch text 雛形)
+
+> visible-as-typewell edge prototype:
+> 1. 各 well で visible 部 GR から **K 個の windows (window_size=200ft step=50ft)** を抽出
+> 2. hidden 部の各 MD chunk (chunk_size=200ft) について visible windows との **NCC** を計算、best window 選出
+> 3. best window の visible 末端 TVT_input + (hidden chunk MD - best window MD) × dTVT/dMD prior を hidden TVT 推定値とする
+> 4. typewell xcorr 系 (現状 exp003) との **加重平均** で final 推定 (重みは visible_ratio に基づく adaptive)
+> 5. CV: `data/processed/typewell_groups.parquet` の `group_id` で `GroupKFold`
+
 ## 11. 関連ファイル
 
 - `docs/research/first-principles.dense.md` (= 母法、計測値の出典)
