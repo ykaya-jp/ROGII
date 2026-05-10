@@ -215,6 +215,33 @@
 - 推奨 variant: 該当 wells の loss weight を **0.5-0.7x** に縮小、CV/LB の感度を計測 → 効果あれば baseline に取り込み
 - 詳細出典: `docs/research/host-resources.dense.md` §3.5.3, `docs/research/independent-edges.dense.md` 案 M (visible-as-typewell との合成可能性)
 
+## 10c. dTVT/dMD constancy 検証 (T7 完了, 2026-05-10)
+
+> **発火元**: discussion topic 697431 msg14-15 「dTVT vs MD plot で **dy が constant** → **synthetic data?**」と疑問提起された
+> **検証**: 全 773 train wells の hidden zone (= TVT_input is NaN, TVT is known) で dTVT/dMD の per-well 分布を計測
+> **再現スクリプト**: 本セッション内 inline、結果保存先 `data/processed/dtvt_constancy.parquet`
+
+### 10c.1 結論: synthetic data **ではない** (real geological variation)
+
+| 指標 | 値 | 解釈 |
+|---|---|---|
+| `slope_mean` (per well dTVT/dMD 平均) | p50 = +0.00028 (= 0.3 mm/ft) | well 全体としてはほぼゼロ trend |
+| `slope_std` (per well 内変動) | p50 = 0.024 | mean の **80 倍以上のばらつき** ⇒ constant ではない |
+| `constancy_score = std / |mean|` < 0.1 を満たす wells | **0 / 773 = 0.0%** | **完全否定** |
+| 4 quarters within 10% relative drift | **0 / 773 = 0.0%** | hidden zone 内で slope は時系列的に必ず変動 |
+| `n_unique_slopes_rounded` (round to 0.001) | p50 = 15 | 1 well 内に最低 15 種類の異なる slope 値 |
+| `fraction_flat` (\|slope\| < 1e-4) | p50 = 0.227 | 1 well 内の 22-23% は flat layer 通過、残り 77% は dip 変化 |
+
+### 10c.2 含意
+
+- discussion 697431 msg14-15 の観察は **ある 1 well のごく一部の区間** (= flat layer 内の lateral) を plot しただけで誤解した可能性が高い
+- 全 773 wells で見ると **dTVT/dMD は時系列で必ず変化** している (= 物理的な multi-formation 通過、PowerPoint Slide 7 の TVT-constant region と TVT-changing region が交互に現れる)
+- **synthetic data 疑念は棄却** ⇒ Eagle Ford / Austin Chalk 系列の real geology
+- 含意 (戦略への):
+  - **「constant slope 仮定」を入れた baseline (= naive last-value) は p50 で flat layer 22% でしか有効でない** → だからこそ extrapolation 系 baseline (15.91 RMSE, `first-principles.dense.md`) が頭打ちする
+  - **slope 変動を陽に model 化** する案 (state-space `案 D`、segment-based `H-T4`、AR1 `first-principles §1.4 §2.5`) が必要
+  - segment 分割 (`host-resources.dense.md` Y2: bimodal dip detection) は **per-well 平均 15 segments 程度** が想定スケール (= n_unique_slopes_rounded p50)
+
 ## 11. 詳細データ
 
 - per-well 統計の全カラム: `outputs/eda/per-well-stats.parquet` (776 rows × 35 cols)
