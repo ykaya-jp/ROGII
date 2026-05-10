@@ -23,9 +23,19 @@ import numpy as np
 import pandas as pd
 
 from .imputers import FORMATIONS, FormationPlaneKNN
+from .tysig import (
+    DEFAULT_BEAM_CONFIGS,
+    affine_gr_cal,
+    beam_search_multi,
+    gr_detrend_resid,
+    self_ncc,
+    tw_diff_features,
+    xcorr_tvt,
+)
 
 GR_ROLL_WINDOWS = (5, 21, 51, 101)
 GR_DIFF_LAGS = (1, 5, 15, 30)
+BEAM_TAGS = tuple(c[0] for c in DEFAULT_BEAM_CONFIGS)
 
 
 def _planefit(visible_x, visible_y, visible_z, visible_t):
@@ -45,7 +55,9 @@ def _rolling_mean_std(arr: np.ndarray, window: int) -> tuple[np.ndarray, np.ndar
 
 
 def _per_well_features(
-    well_df: pd.DataFrame, formation_imputed: np.ndarray | None = None
+    well_df: pd.DataFrame,
+    formation_imputed: np.ndarray | None = None,
+    typewell: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> dict[str, Any]:
     """Compute features for one well.
 
@@ -142,17 +154,88 @@ def _per_well_features(
             out[f"tvtF_{fname}_d"] = (tvt_F_all - last_tvt).astype(np.float32)
             out[f"f_imp_{fname}"] = f_imp
 
+    # Typewell-aligned features (Beam / Self-NCC / tw_diff / xcorr / detrend / affine cal)
+    if typewell is not None and visible_n:
+        tw_tvt, tw_gr = typewell
+        tw_tvt = np.asarray(tw_tvt, np.float32)
+        tw_gr = np.asarray(tw_gr, np.float32)
+
+        # Affine GR cal on visible: kgr ≈ a * tw_gr(known_TVT) + b
+        kgr = gr[visible_mask]
+        ktvt = tvt_in[visible_mask]
+        tw_at_kvis = np.interp(ktvt, tw_tvt, tw_gr).astype(np.float32)
+        a_cal, b_cal = affine_gr_cal(kgr, tw_at_kvis)
+        out["a_cal"] = np.full(n, a_cal, dtype=np.float32)
+        out["b_cal"] = np.full(n, b_cal, dtype=np.float32)
+
+        # GR detrending (linear MD trend removed)
+        out["gr_detrend"] = gr_detrend_resid(md, gr)
+
+        # Self-NCC on FULL well GR for entire row range (not just hidden)
+        sc_raw, sc_score = self_ncc(kgr, ktvt, gr, half_window=15, stride=3)
+        out["sc_raw_tvt"] = sc_raw
+        out["sc_score"] = sc_score
+        out["sc_d"] = (sc_raw - last_tvt).astype(np.float32)
+        sc_trust = float(np.clip(visible_n / 200.0, 0.0, 0.6))
+        out["sc_trust"] = np.full(n, sc_trust, dtype=np.float32)
+
+        # XCorr (longer window)
+        xc_tvt, xc_score = xcorr_tvt(kgr, ktvt, gr, half_window=30)
+        out["xcorr_tvt"] = xc_tvt
+        out["xcorr_score"] = xc_score
+        out["xcorr_d"] = (xc_tvt - last_tvt).astype(np.float32)
+
+        # Beam search 5 configs over the entire well GR
+        bpaths = beam_search_multi(gr, tw_tvt, tw_gr, start_tvt=last_tvt)
+        beam_arr = np.stack([bpaths[t] for t in BEAM_TAGS], axis=1)  # (n, 5)
+        for tag in BEAM_TAGS:
+            out[f"beam_{tag}"] = bpaths[tag]
+            out[f"beam_{tag}_d"] = (bpaths[tag] - last_tvt).astype(np.float32)
+        out["beam_mean"] = beam_arr.mean(1).astype(np.float32)
+        out["beam_std"] = beam_arr.std(1).astype(np.float32)
+        out["beam_med"] = np.median(beam_arr, axis=1).astype(np.float32)
+        out["beam_mean_d"] = (beam_arr.mean(1) - last_tvt).astype(np.float32)
+        out["beam_med_d"] = (np.median(beam_arr, axis=1) - last_tvt).astype(np.float32)
+
+        # tw_diff features (3 anchors × 11 offsets = 33 features)
+        beam_ref_arr = bpaths["cons"]  # use the conservative beam as the beam-anchor
+        td = tw_diff_features(
+            gr.astype(np.float32),
+            tw_tvt,
+            tw_gr,
+            anchor_last=last_tvt,
+            anchor_beam=beam_ref_arr,
+            anchor_sc=sc_raw,
+        )
+        for k, v in td.items():
+            out[k] = v
+
+        # Prefix RMSE (= how well visible GR matches typewell at known TVT)
+        pfx_rmse = float(np.sqrt(np.mean((kgr - tw_at_kvis) ** 2)))
+        out["pfx_rmse"] = np.full(n, pfx_rmse, dtype=np.float32)
+
+        # Typewell summary stats
+        out["tw_gr_mean"] = np.full(n, float(tw_gr.mean()), dtype=np.float32)
+        out["tw_gr_std"] = np.full(n, float(tw_gr.std()), dtype=np.float32)
+        out["tw_tvt_range"] = np.full(n, float(tw_tvt.max() - tw_tvt.min()), dtype=np.float32)
+
     return out
 
 
 def add_features(
-    h: pd.DataFrame, imputer: FormationPlaneKNN | None = None, exclude_self: bool = True
+    h: pd.DataFrame,
+    imputer: FormationPlaneKNN | None = None,
+    typewells: dict[str, tuple[np.ndarray, np.ndarray]] | None = None,
+    exclude_self: bool = True,
 ) -> pd.DataFrame:
-    """Per-well loop with optional formation imputation.
+    """Per-well loop with optional formation imputation and typewell signals.
 
     Args:
         h: long DataFrame with all wells concatenated.
         imputer: trained FormationPlaneKNN. If None, formation features are skipped.
+        typewells: dict[well_id -> (tw_tvt array, tw_gr array)]. If provided,
+            typewell-aligned features (Beam/SC/xcorr/tw_diff/affine cal/detrend/pfx_rmse)
+            are computed.
         exclude_self: when imputing for a TRAIN well, exclude its own centroid
             (proper leave-one-out). For test wells, set to False (test wells are not
             in the training centroids anyway).
@@ -176,7 +259,11 @@ def add_features(
             self_wid = wid if exclude_self else None
             formation_imputed, _min_dist = imputer.impute(xy, self_wid=self_wid)
 
-        feats = _per_well_features(sub, formation_imputed=formation_imputed)
+        typewell = typewells.get(wid) if typewells is not None else None
+
+        feats = _per_well_features(
+            sub, formation_imputed=formation_imputed, typewell=typewell
+        )
         chunks.append(feats)
         if (wi + 1) % 100 == 0 or (wi + 1) == n_wells:
             elapsed = time.perf_counter() - t0
@@ -193,7 +280,7 @@ def add_features(
     return feat_df
 
 
-def feature_columns(formation_avail: bool = True) -> list[str]:
+def feature_columns(formation_avail: bool = True, typewell_avail: bool = False) -> list[str]:
     base = [
         "MD",
         "X",
@@ -237,7 +324,39 @@ def feature_columns(formation_avail: bool = True) -> list[str]:
                 f"tvtF_{fname}_d",
                 f"f_imp_{fname}",
             ]
+    if typewell_avail:
+        base += [
+            "a_cal",
+            "b_cal",
+            "gr_detrend",
+            "sc_raw_tvt",
+            "sc_score",
+            "sc_d",
+            "sc_trust",
+            "xcorr_tvt",
+            "xcorr_score",
+            "xcorr_d",
+        ]
+        for tag in BEAM_TAGS:
+            base += [f"beam_{tag}", f"beam_{tag}_d"]
+        base += [
+            "beam_mean",
+            "beam_std",
+            "beam_med",
+            "beam_mean_d",
+            "beam_med_d",
+        ]
+        # tw_diff: 11 + 11 + 11 = 33 features
+        for o in (-80, -40, -20, -10, -5, 0, 5, 10, 20, 40, 80):
+            base.append(f"tda{int(o)}")
+        for o in (-40, -20, -10, -5, -3, 0, 3, 5, 10, 20, 40):
+            base.append(f"tdbc{int(o)}")
+        for o in (-30, -15, -8, -4, -2, 0, 2, 4, 8, 15, 30):
+            base.append(f"tdsc{int(o)}")
+        base += ["pfx_rmse", "tw_gr_mean", "tw_gr_std", "tw_tvt_range"]
     return base
 
 
+# Default = formation only (exp002 baseline). Set both True for exp003.
 FEATURE_COLS = feature_columns(formation_avail=True)
+FEATURE_COLS_V3 = feature_columns(formation_avail=True, typewell_avail=True)
