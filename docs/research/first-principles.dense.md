@@ -205,3 +205,52 @@ formula が perfect なら RMSE 0。残る誤差は **ANCC imputation + b_well e
 
 この first-principles を踏まえた **独自 edge 候補** は `docs/research/independent-edges.dense.md`。
 戦略 doc 案 A/B/C との突合は `docs/research/strategy-critique.dense.md`。
+
+---
+
+## 7. Addendum 2026-05-10 (discussion 取得後の更新)
+
+> 本セクションは pane 2 (= ROGII リサーチ補助) で `kaggle competitions topic-messages` 経由で全 19 topic 取得 (`docs/discussion/2026-05-10-summary.md`) した結果を §2.7 / §3 に逆反映する。
+
+### 7.1 Edge G (新規追加): inference-time fine-tune が公式に許可
+
+- 出典: discussion topic `698002` (`Is online learning / test-time fine-tuning allowed?`, 10 votes)
+- 1 reply の実測値: **online: 10.953 / no online: 11.323** (差分 -0.37)
+- 含意: §3 表「LB 8 帯到達条件」に **edge G: inference-time fine-tune (TVT_input を self-supervised target、100-300 step)** を追加。期待寄与 -0.3 〜 -1.0。
+- 実装制約: Kaggle notebook 9h 制限内、§697552 の知見から **inference 全体を 3h 以下** に収める必要 → fine-tune は 1-2h 予算。
+
+### 7.2 §2.7 §B の typewell variability に具体 well_id が判明
+
+- 出典: discussion topic `698449` (`Duplicate type wells for different horizontal wells`, ROGII 公式回答 v=2)
+- ROGII 公式: 「project 内 typewells の一部は **pseudo-typewell** (隣接 lateral から作った interpretation)」
+- 公開された duplicate group 13 セット (代表: `02e7fe5a, 10b89021, 3417285d, 6ae68655, 7993a768, bc4381e2, ecdab904, f021b650, f49fdea3, f88ddb26` = 同一 typewell を共有する 10 lateral wells)
+- 含意:
+  - §2.7 §B「`tw_gr_resid_std_p90 = 18.88` の per-well variability」に対する **決定論的識別子**が手に入った
+  - **CV 設計**: well_id GroupKFold だけでは不十分、**typewell hash で stratify** (= 同一 typewell の lateral 群は同一 fold) が必要
+  - **loss weight**: pseudo-typewell ラベル付き lateral は ground truth 信頼度が下がる → loss を 0.5-0.8x に縮小する変種を試す
+  - 上記 13 group を `data/processed/typewell_groups.parquet` 化する task を independent-edges に追加候補
+
+### 7.3 hengck23 提案 「deep net logit: horizontal MD × typewell loc class」
+
+- 出典: discussion topic `697431` (`besides regression, also dwt`, hengck23 ほか) msg16
+- 提案: `output shape = (horizontal MD length, typewell location class)` の transformer logit。各 horizontal step で typewell の **どの位置に対応するか** を class として予測。
+- 含意:
+  - §3 表「LB 8 帯到達条件」の「+ 上記独自 edge A/B/C/D/E/F のうち 2-3 個」に **edge H: NN logit alignment** を追加候補。
+  - 既存「案 B Sequence Transformer (`docs/strategy/winning-strategy.dense.md`)」の variant として整理可。
+  - 実現可能性: 既存 b_well xcorr の代替ではなく **ensemble の片方** として並列 baseline 化が安全。
+
+### 7.4 §1.4 確率モデルの microparameter (公式 TVT 定義との照合)
+
+- 出典: discussion topic `698282` msg4 (ROGII 公式)
+  - **TVT = vertical distance to a virtual/imaginary reference line** (TVT=0 は ground level かは不明)
+  - **lateral と typewell の TVT 軸は対応する** (lateral-typewell pair ごと)
+- 含意: §1.4 の `TVT(s) = -Z(s) + ANCC(s) + b_well(s) + ε(s)` の `b_well` は **「virtual reference line までの per-well offset」** と同一視できる。これにより:
+  - `b_well` を物理的に解釈できる → 「**well の地表点での virtual reference line offset**」
+  - 同 lateral-typewell pair の中では b_well は時間 (= MD) 不変近似が物理的に正当 (§5 b_well drift 観測と整合)
+  - PatrickAIForFun の独立検証 (`ANCC - Z = TVT + offset_per_well`) が物理モデルと一致
+
+### 7.5 残り未取得の重要リソース
+
+- 公式 PowerPoint (data 同梱) — 未読、§1 物理層モデル を更に精緻化できる可能性
+- 公式 YouTube `https://youtu.be/gdK_eY5_QrE?t=146` (geosteering 手動工程) — 未読、§3 LB 8 帯到達の domain insight 候補
+- 別 pane でこれらを `docs/research/host-resources.dense.md` 化する task が `docs/discussion/2026-05-10-summary.md` §4 T5 に登録済
