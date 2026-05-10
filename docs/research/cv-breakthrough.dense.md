@@ -854,6 +854,187 @@ with hierarchical:
 
 ---
 
+## 10A. Track 11: Conditional Diffusion Model for Hidden TVT (案 I 本式化)
+
+### 10A.1 構造原理
+
+| 軸 | 既存 (= point prediction) | Track 11 |
+|---|---|---|
+| 推論パラダイム | Frequentist / Bayesian closed-form | **Generative (score-based diffusion)** |
+| 時系列構造 | i.i.d. or AR(1) | **Conditional sequence generation** |
+| 学習信号 | Direct regression / posterior | **Score matching (= noise prediction)** |
+| 推論時計算 | Static | **Iterative reverse SDE (K=20-50 step)** |
+| 不確実性 | None / point std | **Posterior samples (= ensemble of generative trajectories)** |
+
+`independent-edges.dense.md` §6 案 I で「conditional diffusion model で hidden TVT の posterior を sampling、mean を point prediction に、variance を uncertainty に使う」と提案されていたが **paradigm shift 候補として詳細化されていない**。Track 11 で本式化する。
+
+### 10A.2 着想根拠
+
+- **Ho et al. 2020 DDPM** (https://arxiv.org/abs/2006.11239): conditional generation の基礎
+- **Tashiro et al. 2021 CSDI** (https://arxiv.org/abs/2107.03502): time series imputation の score-based diffusion、ROGII の hidden TVT imputation と **構造完全一致**
+- **Alcaraz & Strodthoff 2022 SSSD-S4** (https://arxiv.org/abs/2208.09399): structured state-space + diffusion で long sequence imputation、CSDI を超える性能
+- **`first-principles.dense.md` §2.4** extrap curve: MD 4000 ft 末端で std 18.83 ft、ensemble で **末端不確実性を陽に modeling** すれば改善
+- **Kaggle G2Net 1 位 (2021)** で diffusion + ensemble で +0.005 mAP (https://www.kaggle.com/competitions/g2net-gravitational-wave-detection/discussion/275390)
+
+### 10A.3 数学的定式 + 実装手順
+
+Conditional score-based diffusion (= CSDI 流):
+
+```
+Forward process:
+q(x_t | x_0) = N(x_t; sqrt(alpha_bar_t) * x_0, (1 - alpha_bar_t) * I)
+
+Reverse (denoising):
+p_theta(x_{t-1} | x_t, c) where c = (Z, X, Y, GR_h, GR_v, TVT_v, Geo_v, visible TVT)
+
+Training loss (score matching):
+L = E_t E_{x_0, eps} ||eps - eps_theta(x_t, t, c)||^2
+
+Sampling: K=20-50 step reverse SDE
+x_0_sample ~ p_theta(x | c)  # 1 sample = 1 hidden TVT trajectory
+
+Ensemble: K=20 samples → mean (point prediction), std (uncertainty feature)
+```
+
+#### Architecture (CSDI core)
+
+```python
+denoiser = TransformerDenoiser(
+    d_model=128, n_heads=8, n_layers=4,
+    n_features=8,  # (TVT_partial, Z, X, Y, GR_h, GR_v, TVT_v, Geo_v)
+    diffusion_step_embedding_dim=64,
+)
+diffusion = GaussianDiffusion(
+    schedule='cosine', T=200,
+    sampling_steps=20,  # DDIM acceleration
+)
+```
+
+#### Training
+
+```python
+for epoch in range(50):
+    for batch in dataloader:
+        x_0 = batch.tvt_residual   # (B, n_step, 1)
+        c = batch.conditional      # (B, n_step, 7)
+        t = torch.randint(0, T)
+        x_t, eps = diffusion.add_noise(x_0, t)
+        eps_pred = denoiser(x_t, t, c)
+        loss = F.mse_loss(eps_pred, eps)
+        loss.backward()
+```
+
+#### Inference
+
+```python
+# K=20 samples per test well
+hidden_samples = torch.stack([
+    diffusion.sample(denoiser, c=test_conditional, steps=20)
+    for _ in range(20)
+])  # (20, B, n_step, 1)
+tvt_pred = hidden_samples.mean(0)
+tvt_uncertainty = hidden_samples.std(0)
+```
+
+### 10A.4 期待 CV 改善 + 工数
+
+- **期待 CV 改善 -0.3 〜 -1.5 ft**: `independent-edges.dense.md` §6.5 と整合。diffusion + ensemble の典型成功幅 (= G2Net、CSDI publication 結果)
+- **工数 5 日**: CSDI 実装 (= 既存 GitHub fork で 1-2 日) + ROGII 用 conditional schema + pretrain (= FORCE 2020 / VOLVE で 2 日) + Kaggle 9hr 検証 (= K=20 sample × 200 test wells = 1-2 hr inference)
+- **依存**: GPU access、PyTorch、Track 5 (Multi-task pretrain) と同基盤
+
+### 10A.5 失敗モード 3 つ + 各々への対策
+
+1. **Training 不安定 (= score matching loss が divergent)**: small data + diffusion 学習は典型的に不安定 → 対策: **EMA model** (= weight の exponential moving average で stable inference)、**classifier-free guidance** (Ho & Salimans 2022) で conditional / unconditional 混合学習、**Track 5 pretrain** で initialize
+2. **K=50 step sampling で 9hr 超過**: 200 wells × 50 step × Transformer forward = 4-6 hr → 対策: **DDIM 20 step** で代替 (Song et al. 2021)、または **DPM-Solver 10 step** (Lu et al. 2022 https://arxiv.org/abs/2206.00927) で 5x 加速
+3. **Mode collapse (= posterior が single mode に collapse、ensemble 効果消失)**: 対策: **multiple seeds × multiple schedules** (= K=20 samples × 3 schedules = 60 samples)、または **classifier-free guidance weight w を 0.0-2.0 で grid search**
+
+### 10A.6 既存 edge との合成可能性
+
+- **Track 5 (Multi-task pretrain) と必須合成**: diffusion denoiser を Track 5 で pretrain
+- **Track 10 (Bayesian Hierarchical) と uncertainty 二重 quantification**: diffusion posterior std + Bayesian posterior std を両方 GBM feature に渡す
+- **Track 8 (3-layer stack) の L1 base として加算**: diffusion mean を 1 base として L2 meta に渡す
+- **既存 GBM stack と orthogonal**: GBM の predict と diffusion の sample mean を Ridge meta で blend
+
+---
+
+## 10B. Track 12: Geometry-first 2-stage prediction (= 大局 dip → row-level residual)
+
+### 10B.1 構造原理
+
+| 軸 | 既存 (= 1-stage row regression) | Track 12 |
+|---|---|---|
+| 推論パラダイム | Frequentist row-wise | **2-stage decomposition (= global dip prior + row residual)** |
+| 学習信号 | Direct regression on residual | **Stage 1: per-well global parameters / Stage 2: row residual** |
+| 時系列構造 | i.i.d. | **Per-well dip / strike を陽に推定** |
+
+`top3-distill.dense.md` §3 FormationPlaneKNN は **per-well centroid を周囲 K=10 wells で plane fit** するが、これは **ANCC top の地理分布** のみ。Track 12 は **当該 well 自体の dip / strike** を visible で推定し、hidden の **大局 TVT trajectory** を先に決め、その上に row-level の細かい変動 (= residual) を別 model で予測する 2-stage。
+
+### 10B.2 着想根拠
+
+- **`problem-essence.dense.md` §1.1** Layer-cake の数学: 「ANCC top depth(X, Y) = a_w X + b_w Y + c_w」 = **well-specific 平面**。我々は地理分布だけでなく **per-well の (a_w, b_w, c_w) 自体を推定** すべき
+- **`host-pptx-summary.dense.md` slide 12-13**: 「Geological dips behave similarly in neighboring wells」「Dip Dip Flat Flat (= 隣接 wells で dip パターンが共有)」 → dip を陽に modeling
+- **`past-comps-deepdive.dense.md` §4.6** Kaggle Indoor Location 1 位 Dmitry Gordeev: **KNN + GBM (location) + CNN+RNN (trajectory reconstruction)** の multi-block 構造、ROGII 案 C (Geometry-Physics Hybrid) の延長
+- **SLB Petrel automatic well-tie** (geophysics 業界標準): **大局 dip → row-level adjustment** は手動 geosteering の標準手順
+
+### 10B.3 数学的定式 + 実装手順
+
+#### Stage 1: Per-well dip estimation
+
+Visible 区間で:
+$$
+\text{TVT}_v(s) = a_w \cdot X(s) + b_w \cdot Y(s) + c_w + \text{ANCC\_residual}(s)
+$$
+の右辺最初の 3 項を **per-well WLS で fit** (= visible データから (a_w, b_w, c_w) を直接推定)。$X(s), Y(s)$ は MD で変化するため、これは **3D plane** ではなく **trajectory 上の 2D plane**。
+
+#### Stage 1 output: 大局 TVT trajectory (hidden 区間)
+
+```python
+TVT_global_hidden(s) = a_w * X(s) + b_w * Y(s) + c_w
+# (= hidden 区間の大局 TVT、visible で fit した平面を hidden に外挿)
+```
+
+#### Stage 2: Row-level residual prediction
+
+```python
+residual_target = TVT_true(s) - TVT_global_hidden(s)   # (= 大局 dip からの偏差)
+LGB.fit(features, residual_target)
+```
+
+#### Combine
+
+```python
+TVT_pred(s) = TVT_global_hidden(s) + LGB.predict(features)
+```
+
+#### Visible_ratio による Stage 1 / Stage 2 重み調整
+
+```python
+# Visible が短い well では Stage 1 (dip fit) の信頼度が低い → Stage 2 model に weight 大
+w_stage1 = clip(visible_ratio / 0.30, 0, 1)   # visible_ratio >= 0.30 で full trust
+TVT_pred(s) = w_stage1 * TVT_global_hidden(s) + (1 - w_stage1) * LGB_stage2_only.predict(features)
+                                                + (Stage 1+Stage 2 の補正項)
+```
+
+### 10B.4 期待 CV 改善 + 工数
+
+- **期待 CV 改善 -0.3 〜 -0.7 ft**: 2-stage decomposition は **大局 dip を陽に取る** ため、Stage 2 LGB の dynamic range が縮小 (= 既存 residual target も `±100 ft` から `±20-30 ft` に縮小)、bias-variance トレードオフで CV 改善
+- **工数 2 日**: per-well WLS plane fit (= 既存 b_well 計算と同型) + Stage 2 LGB train (= 既存パイプラインに residual target 変更) + CV
+- **依存**: 既存 features 全部、LGB pipeline
+
+### 10B.5 失敗モード 3 つ + 各々への対策
+
+1. **Visible 区間で fit した dip が hidden で破綻 (= fault / fold で大局構造が変わる)**: `problem-essence.dense.md` §1.3「fault / fold / unconformity」 → 対策: **per-well dip の confidence interval を Stage 2 feature に渡す** (= visible WLS residual std を per-well feature)、または **fault detection (= dTVT spike 検出) を post-proc で行い、検出された fault 以降は Stage 1 を再 fit**
+2. **Stage 2 residual の RMSE が既存 residual 直接予測と同じ**: 大局 dip が既に既存 features (Z, X, Y) に含まれているため、Stage 2 が結局 同じ問題を解く → 対策: **Stage 1 で複数 dip candidates** を出す (= linear / quadratic / per-formation dip) + **Stage 2 で best candidate を選択する meta-feature** を渡す
+3. **per-well WLS の overfit (visible が短い well で)**: visible 100 rows で 3 parameter fit は OK だが、**5 parameter (quadratic)** に拡張すると overfit → 対策: **shrinkage prior** (= dip parameters を global mean に Ridge regularize)、または **visible_ratio < 0.2 では Stage 1 を skip** して existing pipeline に戻す
+
+### 10B.6 既存 edge との合成可能性
+
+- **`independent-edges.dense.md` §5 案 H (MD-linear b_well) の上位互換**: 案 H は b_well を MD で線形 fit、Track 12 は b_well と ANCC trajectory を含めて per-well plane fit (= 3-parameter)
+- **Track 10 (Bayesian Hierarchical) と本質的合成**: Track 10 の per-well b_well 階層 prior と Track 12 の per-well dip fit は **同一 model 内で結合可能** (= Track 10 hierarchical の sigma_form を Track 12 の dip residual で決定)
+- **既存 6 要素 (FormationPlaneKNN + b_well WLS) と orthogonal**: 既存は per-row imputer、Track 12 は per-well global trajectory → 加算可
+
+---
+
 ## 11. 比較トレードオフ表
 
 | Track | 構造原理 (= paradigm change) | 期待 CV 改善 | 工数 (日) | 独自性 (= 公開 top にないか) | 失敗リスク | 既存 edge 合成 |
@@ -868,6 +1049,8 @@ with hierarchical:
 | **8: 3-layer stacking** | Pyramid meta-of-meta | -0.3 〜 -0.8 | 3 | ★★ (Kaggle 上位常套) | 低-中 (= meta overfit) | Track 1-7 を集約 framework |
 | **9: Embedding well retrieval** | Learned representation KNN | -0.4 〜 -1.0 | 3-4 | ★★★ (Edge N learned 版、ROGII 未実装) | 中 (= AE collapse) | Edge N 拡張、Track 5 合成 |
 | **10: Bayesian Hierarchical** | Hierarchical Bayes posterior | -0.3 〜 -0.8 | 4-5 | ★★★ (公開 top ゼロ) | 中-高 (= MCMC convergence、9hr) | 案 E と合成、Track 6 重畳 |
+| **11: Diffusion (= 案 I 本式化)** | Generative posterior sampling | -0.3 〜 -1.5 | 5 | ★★★ (公開 top ゼロ、CSDI 流) | 中-高 (= training 不安定、sampling 9hr) | Track 5 必須合成、Track 8 base に加算 |
+| **12: Geometry 2-stage** | Per-well dip + row residual | -0.3 〜 -0.7 | 2 | ★★ (案 H 上位互換、ROGII 未実装) | 中 (= fault で大局崩壊) | 案 H 置換、Track 10 と本質的合成 |
 
 ### 11.1 構造原理の 5 軸表 (= `independent-edges.dense.md` §0.1 と整合)
 
@@ -886,8 +1069,10 @@ with hierarchical:
 | **8: 3-layer stack** | Frequentist + meta-learning | i.i.d. | Direct regression | Static | **Cross-meta diversity** |
 | **9: Embedding retrieval** | Frequentist + learned KNN | i.i.d. + per-well retrieve | **AE pretrain** | Static | **Embedding distance** |
 | **10: Bayesian Hierarchical** | **Bayesian posterior** | i.i.d. + hierarchical | **MCMC / VI** | Static | **Posterior credible interval** |
+| **11: Diffusion** | **Generative (score-based)** | **Conditional sequence generation** | **Score matching (noise)** | **Iterative reverse SDE** | **Generative ensemble std** |
+| **12: Geometry 2-stage** | Frequentist (2-stage) | **Per-well global trajectory + i.i.d. residual** | Decomposed regression | Static | None (or visible WLS residual std) |
 
-= Track 1/2/3/5/7/10 は 2 軸以上が変わる **真の paradigm shift**、Track 4/6/8/9 は 1 軸変化の **paradigm extension**。
+= Track 1/2/3/5/7/10/11 は 2 軸以上が変わる **真の paradigm shift**、Track 4/6/8/9/12 は 1-2 軸変化の **paradigm extension**。Track 11 は **5 軸すべてが変化** で最も強い paradigm shift。
 
 ---
 
@@ -936,6 +1121,19 @@ exp007 base:                       CV 10.39
 
 合計 -1.9 ft、想定 CV 8.49。所要工数 10-13 日 (= 残 86 日の 12-15%、最短)。
 
+#### Combo E: 「Generative + Geometry decomposition」 (= 公開 top と最も異なる paradigm)
+
+```
+exp007 base:                       CV 10.39
++ Track 12 (Geometry 2-stage)      -0.5  → CV 9.89
++ Track 11 (Diffusion)             -0.8  → CV 9.09
++ Track 9 (Embedding retrieval)    -0.4  → CV 8.69
++ Track 6 (Loss redesign)          -0.2  → CV 8.49
++ Track 8 (3-layer stack)          -0.2  → CV 8.29
+```
+
+合計 -2.1 ft、想定 CV 8.29。所要工数 16-19 日 (= 残 86 日の 19-22%)。**独自性が最大**、公開 top と paradigm が完全に異なる。
+
 #### Combo D: 「全方位」 (= Track 1/2/3/5/7/8 = 6 track full deploy)
 
 ```
@@ -970,6 +1168,7 @@ exp007 base:                                            CV 10.39
 | B: Deep/Foundation | 8.09 | **8.19** | 8.59 (Top 1 越え) |
 | C: Test-time | 8.49 | **8.59** | 8.99 (賞金圏 9.415 内) |
 | D: 全方位 | 7.89 | **7.99** | 8.39 (Top 1 越え) |
+| E: Generative/Geometry | 8.29 | **8.39** | 8.79 (Top 1 越え、最大独自性) |
 
 公開 Top 1 (9.256) は combo C pessimistic でも越える可能性、combo A/B mid case では確実に超越。
 
@@ -1021,8 +1220,24 @@ exp007 base:                                            CV 10.39
 | 候補 γ: 中道 (= combo C 縮小) | **7 + 4 + 6** | -1.0 〜 -2.4 ft | 5-6 日 | Track 7 の runtime + leak |
 | 候補 δ: 攻め (= combo B 縮小) | **2 + 5 + 6** | -1.3 〜 -2.9 ft | 10-14 日 | NN pretrain 失敗時のリカバリ困難 |
 | 候補 ε: 独自性最大 | **1 + 3 + 10** | -1.0 〜 -2.6 ft | 9-11 日 | 全 track が公開未実装、組合せ debug 困難 |
+| 候補 ζ: Generative attack | **11 + 12 + 8** | -0.8 〜 -2.4 ft | 9-10 日 | Track 11 training 不安定、Generate × Geometry combine debug |
+| 候補 η: 4 track 拡張 (= 候補 β に Track 9 追加) | **3 + 6 + 8 + 9** | -1.4 〜 -2.9 ft | 10-12 日 | Track 9 AE collapse + Track 3 MLE 不安定 同時 debug |
 
-各候補とも `cv-breakthrough` 路線として **paradigm shift を 3 個** 投入する形。判断は中央に委ねる。
+各候補とも `cv-breakthrough` 路線として **paradigm shift を 3-4 個** 投入する形。判断は中央に委ねる。
+
+### 13.4 並列開発時の subagent 分割 (= `agents.md` Parallel Task Execution との整合)
+
+候補が確定したら、各 track を独立 subagent に分割可能 (= track 間依存が低いため):
+
+| track 集合 | subagent 配置 (= worktree branch 名) | 同時可能 worker 数 |
+|---|---|---|
+| 候補 β (= 3+6+8) | `feat/track-3-kalman-beam` + `feat/track-6-loss-redesign` + `feat/track-8-stack-pyramid` | **3 worker** + 中央 1 = 4 pane |
+| 候補 γ (= 7+4+6) | `feat/track-7-online-train` + `feat/track-4-adversarial` + `feat/track-6-loss-redesign` | 3 worker |
+| 候補 δ (= 2+5+6) | `feat/track-5-pretrain` (= 先行 4 日)、その後 `feat/track-2-nn-gbm` + `feat/track-6-loss-redesign` | 2 worker (= Track 2 は 5 後の direct dependency) |
+| 候補 ε (= 1+3+10) | `feat/track-1-classification` + `feat/track-3-kalman-beam` + `feat/track-10-bayesian` | 3 worker |
+| 候補 ζ (= 11+12+8) | `feat/track-11-diffusion` + `feat/track-12-geometry-2stage` + `feat/track-8-stack-pyramid` | 3 worker (= Track 11 は GPU 専有、Track 12/8 は CPU) |
+
+`agents.md` の N+1 ペイン構成 (= チャット 1 + viewer N) に従い、各 subagent には初手で「branch push までで停止、merge は中央 (= 私) が引き受ける、develop に直接 commit 禁止」を通知 (~/.claude/CLAUDE.md 「[2026-04-30] 並列セッション orphan 化」教訓)。
 
 ---
 
