@@ -126,15 +126,36 @@ exp005 LB 10.317 を基準にすると:
 
 ## 6. smoke 結果
 
-(= 実行後追記)
-
 ### 6.1 実行
 
-(= subagent P が実行)
+- スクリプト: `experiments/edge_s_roundgrid/smoke.py`
+- 実行: `.venv/bin/python experiments/edge_s_roundgrid/smoke.py`
+- 対象: 3 wells × 14151 rows (= sample_submission.csv の最初の 3 wells)
+- dummy delta_pred: `np.random.normal(0, 30)` で連続値生成 (= 非 grid)
 
 ### 6.2 観察
 
-(= 数値 + 判断)
+| 項目 | 実測値 | 期待 | 判定 |
+|---|---|---|---|
+| diff abs mean | **0.00250 ft** | 約 0.0025 (= uniform[0, 0.01) 期待値の半分) | PASS |
+| diff abs max | **0.00500 ft** | ≤ 0.005 (= round の最大誤差) | PASS |
+| unique tvt count (round 前) | 14151 | - | - |
+| unique tvt count (round 後) | **13659** | 減少 | PASS (= 492 件 / 3.5% 重複) |
+| 0.01 grid 上 snap 残差 | 0 | < 1e-9 | PASS |
+| dtype | float64 | float64 | PASS |
+| NaN / inf | なし | なし | PASS |
+
+### 6.3 結論
+
+- F1 (= round 方向ミス) 兆候なし: numpy `round` の banker's rounding で完全に対称
+- F2 (= dtype 問題) 兆候なし: `astype(float)` で float64 化 + downstream OK
+- F3 (= 既に grid 化済み) 兆候なし: round で 492 unique 値が消滅 (= round 効果あり)
+
+**LB 改善期待**: dummy data での diff abs mean 0.00250 から推定すると、
+test rows ~14151 × 0.00250 ≈ **35 ft の MAE 削減** が理論上限。
+実 test rows は kernel ごとに違うが、submission の rows count は同じなので、
+**Edge S が test pred に対してどれだけ round 効果を持つか** が鍵。
+karnakbaev artifacts blend の test pred が既に grid 化されている可能性は低い (= SG smooth は連続値を生成する) ので、effect 期待大。
 
 ---
 
