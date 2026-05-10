@@ -216,3 +216,29 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# === Kaggle competition specific (merged from _template-timeseries/.gitignore) ===
+# Data — never commit (use kaggle CLI to re-download)
+data/raw/*
+data/interim/*
+data/processed/*
+data/external/*
+!data/*/.gitkeep
+
+# Outputs — large, regenerable
+outputs/oof/*
+outputs/preds/*
+outputs/models/*
+outputs/logs/*
+!outputs/*/.gitkeep
+
+# Submissions — keep CSV but ignore generated artifacts
+submissions/*.zip
+
+# MLflow local store
+mlruns/
+mlartifacts/
+
+# Local env
+.env
+.env.local

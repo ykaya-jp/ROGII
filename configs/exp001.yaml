@@ -1,0 +1,31 @@
+# Time-series baseline config
+slug: rogii-wellbore-geology-prediction
+target: target
+id_col: id
+task: regression
+metric: rmse
+
+cv:
+  kind: timeseries      # CRITICAL: 時系列は stratified/kfold ではなく必ず timeseries
+  n_splits: 5
+  seed: 42
+
+time:
+  date_col: date
+  freq: D               # 'D' (daily) / 'H' (hourly) / 'M' (monthly)
+
+features:
+  lag: [1, 7, 14, 28]
+  rolling_window: [7, 14, 28]
+  rolling_agg: [mean, std, min, max]
+
+models:
+  lgb:
+    learning_rate: 0.05
+    num_leaves: 63
+    n_estimators: 5000
+    early_stopping: 200
+  darts_nbeats:
+    enabled: false
+  prophet:
+    enabled: false
