@@ -28,14 +28,18 @@ from .tysig import (
     affine_gr_cal,
     beam_search_multi,
     gr_detrend_resid,
+    multi_scale_sc,
     self_ncc,
     tw_diff_features,
+    wls_b_well,
     xcorr_tvt,
+    xcorr_tvt_offsets,
 )
 
 GR_ROLL_WINDOWS = (5, 21, 51, 101)
 GR_DIFF_LAGS = (1, 5, 15, 30)
 BEAM_TAGS = tuple(c[0] for c in DEFAULT_BEAM_CONFIGS)
+SC_HALF_WINDOWS = (8, 15, 25)  # multi-scale Self-NCC (romantamrazov-style)
 
 
 def _planefit(visible_x, visible_y, visible_z, visible_t):
@@ -145,13 +149,25 @@ def _per_well_features(
             b_F_vec = tvt_in[visible_mask] + z[visible_mask] - f_imp[visible_mask]
             b_F_all = float(np.median(b_F_vec))
             b_F_50 = float(np.median(b_F_vec[-50:])) if visible_n >= 50 else b_F_all
+            # WLS (recent-weighted) b_well — romantamrazov-style.
+            # Reference: `_research_kernels/romantamrazov__rogii-super-solution-lb-top-3/...py:181-186`.
+            b_F_wls = wls_b_well(
+                tvt_in[visible_mask].astype(np.float64),
+                z[visible_mask].astype(np.float64),
+                f_imp[visible_mask].astype(np.float64),
+                decay=0.02,
+            )
             tvt_F_all = (-z + f_imp + b_F_all).astype(np.float32)
             tvt_F_50 = (-z + f_imp + b_F_50).astype(np.float32)
+            tvt_F_wls = (-z + f_imp + b_F_wls).astype(np.float32)
             out[f"tvtF_{fname}"] = tvt_F_all
             out[f"tvtF50_{fname}"] = tvt_F_50
+            out[f"tvtFw_{fname}"] = tvt_F_wls
             out[f"bw_{fname}"] = np.full(n, b_F_all, dtype=np.float32)
             out[f"bw50_{fname}"] = np.full(n, b_F_50, dtype=np.float32)
+            out[f"bww_{fname}"] = np.full(n, b_F_wls, dtype=np.float32)
             out[f"tvtF_{fname}_d"] = (tvt_F_all - last_tvt).astype(np.float32)
+            out[f"tvtFw_{fname}_d"] = (tvt_F_wls - last_tvt).astype(np.float32)
             out[f"f_imp_{fname}"] = f_imp
 
     # Typewell-aligned features (Beam / Self-NCC / tw_diff / xcorr / detrend / affine cal)
@@ -171,19 +187,47 @@ def _per_well_features(
         # GR detrending (linear MD trend removed)
         out["gr_detrend"] = gr_detrend_resid(md, gr)
 
-        # Self-NCC on FULL well GR for entire row range (not just hidden)
-        sc_raw, sc_score = self_ncc(kgr, ktvt, gr, half_window=15, stride=3)
-        out["sc_raw_tvt"] = sc_raw
-        out["sc_score"] = sc_score
-        out["sc_d"] = (sc_raw - last_tvt).astype(np.float32)
+        # Multi-scale Self-NCC: 3 window sizes (8/15/25) → 3 independent TVT signals.
+        # Reference: `_research_kernels/romantamrazov__rogii-super-solution-lb-top-3/...py:188-209`.
+        sc_results = multi_scale_sc(kgr, ktvt, gr, half_windows=SC_HALF_WINDOWS, stride=3)
+        for hw in SC_HALF_WINDOWS:
+            sc_tvt_hw, sc_score_hw = sc_results[f"h{hw}"]
+            out[f"sc{hw}_raw_tvt"] = sc_tvt_hw
+            out[f"sc{hw}_score"] = sc_score_hw
+            out[f"sc{hw}_d"] = (sc_tvt_hw - last_tvt).astype(np.float32)
+        # Multi-scale aggregates (median + std across 3 windows)
+        sc_arr = np.stack([sc_results[f"h{hw}"][0] for hw in SC_HALF_WINDOWS], axis=1)
+        sc_raw_med = np.median(sc_arr, axis=1).astype(np.float32)
+        out["sc_med_tvt"] = sc_raw_med
+        out["sc_std_tvt"] = sc_arr.std(axis=1).astype(np.float32)
+        out["sc_med_d"] = (sc_raw_med - last_tvt).astype(np.float32)
         sc_trust = float(np.clip(visible_n / 200.0, 0.0, 0.6))
         out["sc_trust"] = np.full(n, sc_trust, dtype=np.float32)
+        # Use the medium-scale (h15) signal as the anchor for tw_diff (sc_raw)
+        sc_raw = sc_results["h15"][0]
 
-        # XCorr (longer window)
+        # XCorr (visible-prefix-window matching, longer window)
         xc_tvt, xc_score = xcorr_tvt(kgr, ktvt, gr, half_window=30)
         out["xcorr_tvt"] = xc_tvt
         out["xcorr_score"] = xc_score
         out["xcorr_d"] = (xc_tvt - last_tvt).astype(np.float32)
+
+        # Tasmim-style xcorr: TVT-offset sweep around last_known_TVT.
+        # Reference: `_research_kernels/tasmim__lb-11-068.../lb-11-068...py:236-263`.
+        xco = xcorr_tvt_offsets(
+            gr.astype(np.float32),
+            tw_tvt,
+            tw_gr,
+            last_known_tvt=last_tvt,
+            window=30,
+            search_half=100.0,
+            step=2.0,
+        )
+        out["xcorr_delta"] = xco["xcorr_delta"]
+        out["xcorr_corr"] = xco["xcorr_corr"]
+        out["xcorr_absdiff"] = xco["xcorr_absdiff"]
+        # Implied TVT from offset (around lkt)
+        out["xcorr_tvt_off"] = (last_tvt + xco["xcorr_delta"]).astype(np.float32)
 
         # Beam search 5 configs over the entire well GR
         bpaths = beam_search_multi(gr, tw_tvt, tw_gr, start_tvt=last_tvt)
@@ -280,7 +324,11 @@ def add_features(
     return feat_df
 
 
-def feature_columns(formation_avail: bool = True, typewell_avail: bool = False) -> list[str]:
+def feature_columns(
+    formation_avail: bool = True,
+    typewell_avail: bool = False,
+    wls_avail: bool = False,
+) -> list[str]:
     base = [
         "MD",
         "X",
@@ -324,19 +372,32 @@ def feature_columns(formation_avail: bool = True, typewell_avail: bool = False) 
                 f"tvtF_{fname}_d",
                 f"f_imp_{fname}",
             ]
+            if wls_avail:
+                base += [
+                    f"tvtFw_{fname}",
+                    f"bww_{fname}",
+                    f"tvtFw_{fname}_d",
+                ]
     if typewell_avail:
         base += [
             "a_cal",
             "b_cal",
             "gr_detrend",
-            "sc_raw_tvt",
-            "sc_score",
-            "sc_d",
             "sc_trust",
+            "sc_med_tvt",
+            "sc_std_tvt",
+            "sc_med_d",
             "xcorr_tvt",
             "xcorr_score",
             "xcorr_d",
+            "xcorr_delta",
+            "xcorr_corr",
+            "xcorr_absdiff",
+            "xcorr_tvt_off",
         ]
+        # Multi-scale SC features (one block per scale; replaces single-scale sc_*)
+        for hw in SC_HALF_WINDOWS:
+            base += [f"sc{hw}_raw_tvt", f"sc{hw}_score", f"sc{hw}_d"]
         for tag in BEAM_TAGS:
             base += [f"beam_{tag}", f"beam_{tag}_d"]
         base += [
@@ -357,6 +418,8 @@ def feature_columns(formation_avail: bool = True, typewell_avail: bool = False) 
     return base
 
 
-# Default = formation only (exp002 baseline). Set both True for exp003.
+# Default = formation only (exp002 baseline). Set typewell+wls True for exp003.
 FEATURE_COLS = feature_columns(formation_avail=True)
-FEATURE_COLS_V3 = feature_columns(formation_avail=True, typewell_avail=True)
+FEATURE_COLS_V3 = feature_columns(
+    formation_avail=True, typewell_avail=True, wls_avail=True
+)

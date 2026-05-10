@@ -236,6 +236,9 @@ def xcorr_tvt(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Like self_ncc but uses Pearson correlation (not centered NCC) over a longer
     window. Higher resolution at the cost of more compute. Returns (xcorr_tvt, score).
+
+    Note: this is the visible-prefix-window-matching variant (similar in spirit to
+    `self_ncc`). For tasmim's TVT-offset sweep variant, see `xcorr_tvt_offsets`.
     """
     win = 2 * half_window + 1
     nk = len(kgr)
@@ -264,6 +267,101 @@ def xcorr_tvt(
     score = corr.max(1).astype(np.float32)
     ctrs = np.clip(starts[best] + half_window, 0, nk - 1)
     return ktvt[ctrs].astype(np.float32), score
+
+
+# ---------- xcorr_tvt_offsets (tasmim-style: TVT-offset sweep around lkt) ----------
+
+
+def xcorr_tvt_offsets(
+    hgr: np.ndarray,
+    tw_tvt: np.ndarray,
+    tw_gr: np.ndarray,
+    last_known_tvt: float,
+    window: int = 30,
+    search_half: float = 100.0,
+    step: float = 2.0,
+) -> dict[str, np.ndarray]:
+    """Per hidden row, find TVT offset around `last_known_tvt` that maximises
+    Pearson correlation between local-window observed GR and tw_gr at that offset.
+
+    Returns dict with 3 numpy arrays of length len(hgr):
+      - xcorr_delta:    best TVT offset (signed; bounded to ±search_half)
+      - xcorr_corr:     best Pearson correlation in [-1, 1]
+      - xcorr_absdiff:  mean abs diff between observed window and tw_gr at best offset
+                       (999 sentinel when window invalid)
+
+    Reference: `_research_kernels/tasmim__lb-11-068.../lb-11-068...py:236-263`.
+    """
+    n = len(hgr)
+    if n == 0:
+        return {
+            "xcorr_delta": np.zeros(0, np.float32),
+            "xcorr_corr": np.zeros(0, np.float32),
+            "xcorr_absdiff": np.zeros(0, np.float32),
+        }
+    hgr = np.asarray(hgr, np.float32)
+    tw_tvt = np.asarray(tw_tvt, np.float32)
+    tw_gr = np.asarray(tw_gr, np.float32)
+    offsets = np.arange(-search_half, search_half + step, step, dtype=np.float32)
+    half = window // 2
+    best_off = np.zeros(n, np.float32)
+    best_corr = np.zeros(n, np.float32)
+    best_abs = np.full(n, 999.0, np.float32)
+    for i in range(n):
+        lo = max(0, i - half)
+        hi = min(n, i + half + 1)
+        obs = hgr[lo:hi]
+        valid = np.isfinite(obs)
+        if valid.sum() < max(5, window // 4):
+            continue
+        ov = obs[valid]
+        ov_std = float(ov.std())
+        # positions: (n_off, n_valid). For each offset, sample tw_gr at
+        # last_known_tvt + offset + (idx - i) (= relative depth offset within window).
+        rel = (np.arange(lo, hi)[valid] - i).astype(np.float32)
+        positions = last_known_tvt + offsets[:, None] + rel[None, :]
+        tw_vals = np.interp(positions.ravel(), tw_tvt, tw_gr).reshape(positions.shape)
+        if ov_std < 1e-3:
+            mae = np.abs(tw_vals - ov[None, :]).mean(axis=1)
+            bi = int(np.argmin(mae))
+            best_off[i] = float(offsets[bi])
+            best_abs[i] = float(mae[bi])
+        else:
+            tw_m = tw_vals.mean(axis=1, keepdims=True)
+            tw_s = tw_vals.std(axis=1) + 1e-9
+            ov_m = float(ov.mean())
+            corr = ((tw_vals - tw_m) * (ov - ov_m)[None, :]).mean(axis=1) / (tw_s * ov_std)
+            bi = int(np.argmax(corr))
+            best_off[i] = float(offsets[bi])
+            best_corr[i] = float(np.clip(corr[bi], -1.0, 1.0))
+            best_abs[i] = float(np.abs(tw_vals[bi] - ov).mean())
+    return {
+        "xcorr_delta": best_off,
+        "xcorr_corr": best_corr,
+        "xcorr_absdiff": best_abs,
+    }
+
+
+# ---------- multi_scale_sc (3 window sizes, romantamrazov-style) ----------
+
+
+def multi_scale_sc(
+    kgr: np.ndarray,
+    ktvt: np.ndarray,
+    hgr: np.ndarray,
+    half_windows: tuple[int, ...] = (8, 15, 25),
+    stride: int = 3,
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """Multi-scale Self-NCC: 3 independent TVT signals at different window sizes.
+
+    Reference: `_research_kernels/romantamrazov__rogii-super-solution-lb-top-3/...py:188-209`.
+    Returns dict[scale_tag -> (sc_raw_tvt[nh], sc_score[nh])] where tag = "h{hw}".
+    """
+    out: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    for hw in half_windows:
+        sc_tvt, sc_score = self_ncc(kgr, ktvt, hgr, half_window=int(hw), stride=stride)
+        out[f"h{hw}"] = (sc_tvt, sc_score)
+    return out
 
 
 # ---------- gr_detrend_resid ----------
