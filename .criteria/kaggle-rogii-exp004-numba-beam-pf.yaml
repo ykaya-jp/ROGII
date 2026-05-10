@@ -1,0 +1,178 @@
+task_id: kaggle-rogii-exp004-numba-beam-pf
+goal: |
+  exp003 (xcorr_tvt + multi-scale SC + Beam x5 + Self-NCC + tw_diff + WLS b_well)
+  の上に Numba JIT Beam x7 (delta +/-2) + Numba Particle Filter (ANCC + Z 両方, N=500)
+  を src/rogii/{beam,pf}.py として再実装、self-contained Kaggle script kernel で
+  LB 10.5 帯到達を狙う。
+  Phase 3 (改修 b multi-edge stack A+D+E+G) の最初の実装 exp。
+
+context:
+  branch: feat/phase-3-exp004-numba-beam-pf
+  parent_branch: feat/phase-2-exp003
+  spec: docs/research/top3-distill.dense.md  # Beam = 1.1 / PF = 2 / leak = 8.1 / numerical = 8.2
+  schedule: docs/dev/schedule-2026-05-10.dense.md  # §0.2 exp004 row
+  amendment: docs/research/strategy-critique.dense.md  # §4.2 改修 b
+  inspired_by:
+    - _research_kernels/romantamrazov__rogii-super-solution-lb-top-3/rogii-super-solution-lb-top-3.py:108-144  # Numba Beam
+    - _research_kernels/romantamrazov__rogii-super-solution-lb-top-3/rogii-super-solution-lb-top-3.py:223-313  # PF
+
+deliverables:
+  - path: src/rogii/beam.py
+    purpose: Numba JIT Beam Search 7 configs (delta +/-2), self_exclusion 対応
+  - path: src/rogii/pf.py
+    purpose: Numba Particle Filter for ANCC and Z (N=500), self_exclusion 対応
+  - path: tests/test_beam.py
+    purpose: smoke test (1 well x 1 config) + leak check (self_wid 除外確認)
+  - path: tests/test_pf.py
+    purpose: smoke test + numerical stability check (lk floor, pos clip)
+  - path: kaggle_kernels/exp004_numba_beam_pf/exp004_numba_beam_pf.py
+    purpose: self-contained Kaggle script (0 から train + predict + submission.csv)
+  - path: kaggle_kernels/exp004_numba_beam_pf/kernel-metadata.json
+    purpose: kernel push 用 metadata (kernel_id ky7240/rogii-exp004-numba-beam-pf)
+  - path: experiments/exp004/notes.md
+    purpose: 実装ノート (日本語、features, CV, 失敗回避ログ, 残課題, 次の variants)
+  - path: pyproject.toml
+    purpose: numba を直接 dependency に追加 (uv.lock には existing)
+
+baseline:
+  - metric: cv_tvt_hidden_rmse_exp002
+    value: 13.82
+    note: kernel COMPLETE 確認済 (Local CV)
+  - metric: cv_tvt_hidden_rmse_exp003
+    value: TBD
+    note: kernel RUNNING、結果出次第 schedule + leaderboard へ追記
+
+out_of_scope:
+  - 案 D (Kalman/PF on dTVT)             # exp006 で別 plan
+  - 案 E (Bayesian GP for ANCC)         # exp007 で別 plan
+  - 案 G (Per-Well MoE)                 # exp008 で別 plan
+  - karnakbaev artifact blend           # exp005 で別 plan
+  - TabICL stack                        # exp005 で別 plan
+  - Diffusion (案 I)                    # 改修 b では採択せず
+  - Kaggle Discussions deep dive        # subagent C 復活時の別 task
+  - case F (Soft-DTW + Cross-Attn)      # 改修 b 採択せず
+  - 1D U-Net residual (案 C 由来)       # 改修 b 降格
+
+risks:
+  - Numba JIT compile 時間が cold start で長い (= 数十秒 overhead)
+    -> 対策: cache=True で AOT 化、Kaggle 上で warmup phase を 1 well で実行してから本番
+  - Numba random seed が LightGBM と miss-align で reproducibility 失う
+    -> 対策: np.random.seed(42) + numba.config.SET_SEED + LGB seed=42 を全部統一
+  - Kaggle 9 hr runtime overflow (= 776 wells x 7 beam configs x 2 PFs で計算量爆発)
+    -> 対策: time.perf_counter() で 8 hr hard timeout、超えたら early stop して既存 OOF で submit
+  - Self-NCC + Beam + PF の memory bound (= 並列で OOM)
+    -> 対策: joblib prefer='threads' (top3-distill §8.5)、RSS monitor、batch size 制御
+  - LB が CV と乖離 (= overfit)
+    -> 対策: CV-LB diff > 0.5 ft で要 rollback、後段 exp005 へ進む前に postmortem
+  - leak (= self exclusion 漏れで OOF 異常に良くなる、top3-distill §8.1 警告)
+    -> 対策: AC-1 で test_beam/test_pf に leak 検査を組み込む、self_wid=None 時のみ全 wells 参照
+  - numerical instability (= linalg.solve 特異 / PF particle 全死、top3-distill §8.2)
+    -> 対策: AC-12 reviewer rubric に明記、except 内 pinv fallback 必須
+  - subagent kill 再発 (2026-05-10 経験、4 並列が全 kill)
+    -> 対策: 並列度 2 max、subagent dispatch 時に 30 分毎の中間 commit を厳命
+
+acceptance_criteria:
+  - id: AC-1
+    description: src/rogii/beam.py と src/rogii/pf.py が存在
+    type: output_exists
+    severity: required
+    path: src/rogii/beam.py
+  - id: AC-1b
+    description: src/rogii/pf.py 存在
+    type: output_exists
+    severity: required
+    path: src/rogii/pf.py
+  - id: AC-2
+    description: pytest smoke test pass (Numba 関数の動作 + leak check + numerical floor)
+    type: test_pass
+    severity: required
+    command: ".venv/bin/python -m pytest tests/test_beam.py tests/test_pf.py -v --timeout=180"
+    expected_exit_code: 0
+    timeout_seconds: 300
+  - id: AC-3
+    description: ローカル CV (5-fold GroupKFold by well) TVT hidden RMSE <= 11.5 ft
+    type: metric_threshold
+    severity: required
+    command: ".venv/bin/python -m rogii.train_v3 --exp exp004 --cv-only --quiet"
+    extract_pattern: "CV TVT hidden RMSE = ([0-9]+\\.[0-9]+)"
+    op: "<="
+    value: 11.5
+    timeout_seconds: 7200  # 2 hours
+  - id: AC-4
+    description: Kaggle kernel script が self-contained (= 外部 src/* に依存しない、Internet disabled で動く)
+    type: manual_review
+    severity: required
+    rubric: |
+      - kernel script は外部 src/rogii/* に依存しない (= 全コードを kernel script 内に inline)
+      - imports は stdlib + lightgbm + numpy + pandas + scipy + numba のみ
+      - DATA_DIR 自動検出ロジック (= /kaggle/input or local data/raw)
+      - time.perf_counter() で 8 hr hard timeout 入り
+      - random seed deterministic (= np.random.seed + numba seed + LGB seed=42 統一)
+  - id: AC-5
+    description: Kaggle kernel push 成功 (= title slug が id に resolve)
+    type: test_pass
+    severity: required
+    command: ".venv/bin/kaggle kernels push -p kaggle_kernels/exp004_numba_beam_pf/"
+    expected_exit_code: 0
+    timeout_seconds: 180
+  - id: AC-6
+    description: Kaggle kernel run COMPLETE + submission.csv 生成
+    type: manual_review
+    severity: required
+    rubric: |
+      - .venv/bin/kaggle kernels status ky7240/rogii-exp004-numba-beam-pf が "COMPLETE"
+      - kernel runtime <= 8 hours (Kaggle UI の elapsed 表示で確認、9 hr は危険、8 hr が安全 budget)
+      - kernel output に submission.csv が含まれる
+  - id: AC-7
+    description: Public LB <= 11.0 ft (= Phase 3 LB 10.5 目標へ向けた中間値)
+    type: manual_review
+    severity: required
+    rubric: |
+      - kaggle competitions submissions の publicScore <= 11.0
+      - exp003 LB と比較し改善している (= 退行していない)
+      - もし CV (AC-3) と LB diff > 0.5 ft なら overfit 警戒、postmortem skill 起動
+      - もし AC-3 pass で AC-7 fail (= LB 11.0 超え) なら exp005 へ進む前に rollback / 再設計
+  - id: AC-8
+    description: License compliance (top3-distill §9 準拠)
+    type: manual_review
+    severity: required
+    rubric: |
+      - feat: commit message に "inspired by romantamrazov/rogii-super-solution-lb-top-3" を含む
+      - kernel script 冒頭の docstring に同上 + Apache 2.0 default 注記
+      - 著者コードを 30 行を超えて連続 copy していない (= アルゴリズム再実装)
+  - id: AC-9
+    description: feat branch を origin に push、merge は中央が引き受け (CLAUDE.md agents.md 準拠)
+    type: test_pass
+    severity: required
+    command: "git rev-parse --verify origin/feat/phase-3-exp004-numba-beam-pf"
+    expected_exit_code: 0
+    timeout_seconds: 30
+  - id: AC-10
+    description: experiments/exp004/notes.md が日本語で書かれ、4 section を含む
+    type: manual_review
+    severity: required
+    rubric: |
+      - CLAUDE.md "Plan Mode 出力ルール" 準拠 (本文日本語、コード識別子英語)
+      - section 1: 実装した features と移植元 file:line
+      - section 2: CV TVT hidden RMSE (per-fold + overall)
+      - section 3: 失敗 pattern と回避ログ (numba JIT cold start, memory, leak など)
+      - section 4: 次に試す価値のある variant 1-2 個 + Phase 3 残 exp005 への引継ぎ
+  - id: AC-11
+    description: ruff lint pass on changed files
+    type: test_pass
+    severity: recommended
+    command: ".venv/bin/python -m ruff check src/rogii/beam.py src/rogii/pf.py kaggle_kernels/exp004_numba_beam_pf/exp004_numba_beam_pf.py"
+    expected_exit_code: 0
+    timeout_seconds: 30
+  - id: AC-12
+    description: Independent code review pass (reviewer agent judgment)
+    type: manual_review
+    severity: required
+    rubric: |
+      - Numba @njit functions: pure numerical (no Python objects in inner kernel)
+      - random seed deterministic (= 同一 seed で同一結果が再現する)
+      - leak check: PF / Beam の self_exclusion (top3-distill §8.1) 守られている
+      - numerical stability: lk = max(lk, 1e-300), pos clip with 50 ft buffer (top3-distill §8.2)
+      - error handling: linalg.solve except -> pinv fallback
+      - public API に explicit type hints
+      - 実装が src/rogii/imputers.py / features.py の既存 pattern に沿っている
