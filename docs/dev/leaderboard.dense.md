@@ -8,7 +8,7 @@
 | date (UTC) | sub id | exp | model | CV | public LB | private LB | rank | diff | note |
 |---|---|---|---|---|---|---|---|---|---|
 | 2026-05-10 13:25 | 52515207 | exp002 | LGB residual baseline (tvt_formula + 6-formation FormationPlaneKNN) | **13.82** | **14.695** | - | 圏外 (>1000?) | **+0.875** ⚠️ | kernel: `ky7240/rogii-exp002-lgb-residual-tvt-formula` v3。CV-LB diff +0.875 ft で **悪化方向**、公開 baseline 12.602 にも届いていない |
-| 2026-05-10 15:58 | 52519856 | exp003 | LGB tysig (xcorr_tvt + multi-scale SC + WLS b_well + Beam x5 + Self-NCC + tw_diff 33 anchor x offset + GR detrend resid) | TBD | _PENDING_ (1.5h+) | - | - | - | kernel: `ky7240/rogii-exp003-lgb-tysig` v1。Kaggle scoring queue 遅延中 |
+| 2026-05-10 15:58 | 52519856 | exp003 | LGB tysig (xcorr_tvt + multi-scale SC + WLS b_well + Beam x5 + Self-NCC + tw_diff 33 anchor x offset + GR detrend resid) | (no 自前 CV) | **17.510** ⚠️⚠️ | - | exp002 より悪化 +2.815 | - | kernel: `ky7240/rogii-exp003-lgb-tysig` v1。**自前複雑 features 単独路線の劇的失敗** = 33 anchor x offset 等の高次 features 過剰添加で overfit 起こした可能性。CV-LB diff も大きい (= subagent A の CV 計測未完了で正確値不明、想定 12-13 → LB 17.510)。**学び: 自前 features 単独路線は捨て、karnakbaev blend ベース + 補助 features 路線に集中** |
 | 2026-05-10 16:14 | 52520314 | exp005 | karnakbaev pretrained LGB3+XGB+CB blend (Apache-2.0) + live test FE + Ridge meta | (no 自前 CV) | **10.317** | - | Silver (~30-50 位) | - | kernel: `ky7240/rogii-exp005-cache-blend` v1。subagent G 構築、kernel runtime 70 秒、Approach B = karnakbaev artifact blend (LB 10.784 base) → +0.467 ft 改善で 10.317、**Gold まで +0.398** |
 | 2026-05-10 16:51 | 52521223 | exp006 | exp005 + TabICL 6th base (4096 ctx, n_est=4) + Ridge 6-base re-fit (positive=True) | (no 自前 CV) | **10.503** ⚠️ | - | exp005 より下落 | - | kernel: `ky7240/rogii-exp006-tabicl-pflite` v1。subagent I 構築、Kaggle GPU 上で完走。**TabICL 投入が negative** = Ridge 6-base re-fit で blend weights 劣化 (推測: TabICL OOF が exp005 5-base より悪く、positive 制約下で fold 内 weight 配分が exp005 base 単独より劣化)。**postmortem 必要** |
 
@@ -123,7 +123,7 @@ CV と public LB の diff を毎回算出。
 | exp | CV | LB | diff | 解釈 |
 |---|---|---|---|---|
 | exp002 | 13.82 | **14.695** | **+0.875** | **CV-LB +0.875 ft 悪化方向**。原因仮説: (1) GroupKFold by well の visible/hidden 分割が test の hidden パターンを過小推定、(2) tvt_formula の 6-formation FormationPlaneKNN の test 側 imputation が train より弱い、(3) hidden zone 末端の systematic bias (= `first-principles.dense.md` §2.4 でのMD 9000+ で mean -16) を捕捉できていない |
-| exp003 | TBD | _PENDING_ | TBD | 期待: tysig features で improve、CV-LB diff < 0.5 を願う |
+| exp003 | (no 自前 CV) | **17.510** | very large | **CRITICAL FAILURE**: 自前 LGB tysig 単独路線で features 33+ 過剰添加 → 大幅 overfit。LB 17.510 は公開 baseline (12.602) どころか exp002 baseline (14.695) より悪化 +2.815 ft。**学び**: (a) 自前複雑 features 単独路線は捨て、karnakbaev blend を母法に補助 features を加える路線に集中 (= exp005-009 路線)、(b) 自前 features を加える時は **OOF で必ず CV を測定し** karnakbaev blend と比較してから submit (= 今回 subagent A が CV 取らず submit したのが根本原因) |
 | exp005 | (no 自前 CV) | _PENDING_ | TBD | karnakbaev artifacts は OOF 既知 (= 約 10.78)、自前 CV 取らずに test pred 直接生成 |
 
 > CV-LB diff > 0.5 ft → overfit 警戒。Sub 確定時 (Phase 6) は CV best と LB best の **両方** を Sub 1/2 に選択。
