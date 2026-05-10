@@ -30,6 +30,7 @@ dependencies = [
     "statsforecast>=2.0",
     "tsfresh>=0.21",
     "prophet>=1.1",
+    "rich>=15.0.0",
 ]
 
 [project.optional-dependencies]

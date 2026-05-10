@@ -1,4 +1,4 @@
-.PHONY: help install download eda baseline tune pseudo stack submit lint test fmt clean
+.PHONY: help install download eda baseline watch tune pseudo stack submit lint test fmt clean
 
 SLUG := rogii-wellbore-geology-prediction
 PKG  := rogii
@@ -10,6 +10,7 @@ help:
 	@echo "  download  - kaggle competitions download -c $(SLUG) -p data/raw + unzip"
 	@echo "  eda       - launch jupyter on notebooks/00_eda.ipynb"
 	@echo "  baseline  - run src/$(PKG)/train_baseline.py (LGB/XGB/CB/Linear, 5-fold CV)"
+	@echo "  watch     - launch live monitor (rich-based dashboard, polls outputs/logs/exp00*_lgb.log)"
 	@echo "  tune      - run src/$(PKG)/tune.py (Optuna 100 trials)"
 	@echo "  pseudo    - run src/$(PKG)/pseudo.py (1-round pseudo-labeling)"
 	@echo "  stack     - run src/$(PKG)/stack.py (OOF stacking)"
@@ -64,3 +65,6 @@ clean:
 	rm -rf mlruns mlartifacts
 	rm -rf outputs/oof/* outputs/preds/* outputs/models/* outputs/logs/*
 	@touch outputs/oof/.gitkeep outputs/preds/.gitkeep outputs/models/.gitkeep outputs/logs/.gitkeep
+
+watch:
+	$(UV) run python -m rogii.watch $(L)
