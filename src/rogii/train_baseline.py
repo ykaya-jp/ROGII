@@ -39,9 +39,9 @@ OUT_LOG = Path("outputs/logs")
 LGB_PARAMS = {
     "objective": "regression",
     "metric": "rmse",
-    "learning_rate": 0.05,
-    "num_leaves": 127,
-    "min_data_in_leaf": 64,
+    "learning_rate": 0.1,
+    "num_leaves": 63,
+    "min_data_in_leaf": 128,
     "feature_fraction": 0.85,
     "bagging_fraction": 0.85,
     "bagging_freq": 5,
@@ -54,9 +54,9 @@ LGB_PARAMS = {
     "bagging_seed": 42,
     "num_threads": -1,
 }
-NUM_BOOST_ROUND = 4000
-EARLY_STOPPING = 200
-LOG_PERIOD = 100
+NUM_BOOST_ROUND = 2000
+EARLY_STOPPING = 100
+LOG_PERIOD = 50
 
 
 def main() -> None:
