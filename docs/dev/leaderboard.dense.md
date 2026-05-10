@@ -9,7 +9,8 @@
 |---|---|---|---|---|---|---|---|---|---|
 | 2026-05-10 13:25 | 52515207 | exp002 | LGB residual baseline (tvt_formula + 6-formation FormationPlaneKNN) | **13.82** | **14.695** | - | 圏外 (>1000?) | **+0.875** ⚠️ | kernel: `ky7240/rogii-exp002-lgb-residual-tvt-formula` v3。CV-LB diff +0.875 ft で **悪化方向**、公開 baseline 12.602 にも届いていない |
 | 2026-05-10 15:58 | 52519856 | exp003 | LGB tysig (xcorr_tvt + multi-scale SC + WLS b_well + Beam x5 + Self-NCC + tw_diff 33 anchor x offset + GR detrend resid) | TBD | _PENDING_ (1.5h+) | - | - | - | kernel: `ky7240/rogii-exp003-lgb-tysig` v1。Kaggle scoring queue 遅延中 |
-| 2026-05-10 16:14 | 52520314 | exp005 | karnakbaev pretrained LGB3+XGB+CB blend (Apache-2.0) + live test FE + Ridge meta | TBD | _PENDING_ (~30 min) | - | - | - | kernel: `ky7240/rogii-exp005-cache-blend` v1。subagent G 構築、kernel runtime 70 秒、Approach B = karnakbaev artifact blend (LB 10.784 base) |
+| 2026-05-10 16:14 | 52520314 | exp005 | karnakbaev pretrained LGB3+XGB+CB blend (Apache-2.0) + live test FE + Ridge meta | (no 自前 CV) | **10.317** | - | Silver (~30-50 位) | - | kernel: `ky7240/rogii-exp005-cache-blend` v1。subagent G 構築、kernel runtime 70 秒、Approach B = karnakbaev artifact blend (LB 10.784 base) → +0.467 ft 改善で 10.317、**Gold まで +0.398** |
+| 2026-05-10 16:51 | 52521223 | exp006 | exp005 + TabICL 6th base (4096 ctx, n_est=4) + Ridge 6-base re-fit (positive=True) | (no 自前 CV) | **10.503** ⚠️ | - | exp005 より下落 | - | kernel: `ky7240/rogii-exp006-tabicl-pflite` v1。subagent I 構築、Kaggle GPU 上で完走。**TabICL 投入が negative** = Ridge 6-base re-fit で blend weights 劣化 (推測: TabICL OOF が exp005 5-base より悪く、positive 制約下で fold 内 weight 配分が exp005 base 単独より劣化)。**postmortem 必要** |
 
 ## 主要 LB ベンチマーク (2026-05-11 取得 = 公開 LB Gold cutoff の実態)
 
@@ -60,22 +61,60 @@
 | - | ? | `svanikkolli/beamstack-255-engine` (34 votes, GPU) | BeamStack-255 |
 | NN starter | CV 15.5 | cdeotte `nn-starter-cv-15-5` | NN 例 |
 
-## 自前 exp 目標 LB (= 改修 b A+D+E+G の roadmap)
+## 9 切り戦略 (= LB 8.x 帯到達、優勝条件、2026-05-11 採択)
 
-> 改修 b 採択 (`docs/dev/schedule-2026-05-10.dense.md` §0)。Public LB Top 20 = LB 9.919、Top 4 = LB 9.415、Top 1 = LB 9.256。
+ユーザー指示 (2026-05-11):「9 切らないと優勝は無理」 = **public LB 9.0 を切る (= 8.x 帯)** 必要。
+public LB Top 1 = 9.256 だが、private LB との order 反転リスクを見越して **8.0-8.5 帯** が安全圏。
 
-| Phase | exp | LB 目標 | 仕掛け | 状態 |
+### 現状から 8.x 帯までの距離
+
+| 起点 | LB | Top 1 (9.256) まで | 8.5 まで | 8.0 まで |
 |---|---|---|---|---|
-| 2 | exp002 | 12.x | tvt_formula + LGB baseline | ✅ LB **14.695** (悪化、CV-LB diff +0.875) |
-| 2 | exp003 | 11.x | + xcorr_tvt + wls_b_well + multi-scale SC + gr_detrend_resid | 🟡 PENDING |
-| 3 | **exp005** | **9-10** | **karnakbaev artifacts blend** (LB 10.784 base + live test FE + Ridge meta) | 🟡 PENDING |
-| 3 | **exp006** | **9.0-9.5** | exp005 + **TabICL** + **PF-lite** (pilkwang stateless ensemble) | subagent I 準備中 |
-| 4 | exp007 | 9.0-9.3 | + 案 D (Kalman/PF on dTVT, AR(1) MAP feature) | 未着手 |
-| 4 | exp008 | 8.7-9.0 | + 案 E (Bayesian GP for ANCC posterior + var feature) | 未着手 |
-| 5 | exp009 | 8.5-8.8 | + 案 G (Per-Well MoE wrapper) | 未着手 |
-| 5 | exp010 | **8.0-8.5 (1 位射程)** | + final stack A+D+E+G OOF Ridge + post-proc | 未着手 |
-| 6 | exp011 | 7.8 | + pseudo-label round | 未着手 |
-| 6 | exp012-13 | - | final 2 sub | 未着手 |
+| exp005 (現 best) | **10.317** | -1.061 | **-1.817** | **-2.317** |
+| exp007 想定 (Edge Q + M) | 9.5-9.7 | -0.244 〜 +0.444 | -1.0〜-1.2 | -1.5〜-1.7 |
+
+= **exp005 から -2.0 ft 以上の改善**が必要。これは複数の独自 edge を**順次積み上げ + final stack** が必須。
+
+### 9 切り roadmap (= 改修 b 拡張、残 86 日)
+
+| Phase | exp | LB 目標 | 投入 edge | 状態 |
+|---|---|---|---|---|
+| 3 (現) | **exp005** | **9-10** | karnakbaev artifacts blend | ✅ **LB 10.317** (Silver) |
+| 3 | exp006 | 9.0-9.5 | + TabICL + Ridge 6-base re-fit | ✅ **LB 10.503** ⚠️ (悪化、postmortem 必要) |
+| 3 | **exp007** | **9.5-9.7** | exp005 base + **Edge Q (typewell hash CV)** + **Edge M (visible-as-typewell)** + 自前 LGB×3+CB | subagent K 準備中 (kernel push 直前) |
+| 4 | exp008 | 9.0-9.4 | + **案 D (Kalman/PF on dTVT, AR(1) MAP feature)** | 未着手 |
+| 4 | exp009 | 8.7-9.0 | + **案 E (Bayesian GP for ANCC posterior + var feature)** + **Edge O (direction-aware Beam/NCC)** | 未着手 |
+| 5 | exp010 | 8.4-8.7 | + **Edge N (offset well retrieval / dip continuity)** + **Edge P (pseudo-typewell linkage prior)** | 未着手 |
+| 5 | exp011 | 8.2-8.5 | + **Edge R (Online TTA, +0.37 ft 実測)** | 未着手 |
+| 5 | exp012 | 8.0-8.3 | + **案 G (Per-Well MoE wrapper)** + final stack 全 OOF Ridge meta | 未着手 |
+| 6 | exp013 | 7.9-8.1 | + post-proc (Geology snap / dip continuity / PID smooth) + pseudo-label round | 未着手 |
+| 6 | exp014-15 | - | final 2 sub: CV best vs LB best | 未着手 |
+
+### 9 切りに必要な独自 edge stack (= 公開 top にない 8 layers)
+
+1. **Edge Q (Typewell-aware GroupKFold)** — pseudo-typewell leak 解消、+0.05〜+0.20 ft
+2. **Edge M (visible-as-typewell)** — host pptx slide 9 公式 endorsement、-0.30〜-0.60 ft
+3. **案 D (Kalman/PF on dTVT)** — AR(1) auto-correlation 0.999 を陽にmodel、-0.30〜-0.60 ft
+4. **案 E (Bayesian GP for ANCC)** — point estimate → posterior + variance、-0.40〜-0.80 ft
+5. **Edge O (direction-aware Beam/NCC)** — host pptx slide 6-7 endorsement、-0.10〜-0.30 ft
+6. **Edge N (offset well retrieval)** — host pptx slide 12-13 endorsement、-0.40〜-0.80 ft
+7. **Edge P (pseudo-typewell linkage prior)** — subagent J 発見、-0.20〜-0.40 ft
+8. **Edge R (Online TTA)** — 公開実測 +0.37 ft、-0.30〜-0.40 ft
+9. **案 G (Per-Well MoE)** — visible_ratio gating、-0.20〜-0.50 ft
+10. **Final stack + post-proc + pseudo-label** — Ridge meta + Geology snap + PID smooth + 1 round pseudo、-0.30〜-0.60 ft
+
+合計期待値 (= 全部 hit): exp005 (10.317) - 2.55〜-5.20 ft = **LB 5.1〜7.8 帯**。
+合計期待値 (= 50% hit): -1.3〜-2.6 ft = **LB 7.7〜9.0 帯**。
+**Top 1 (9.256) 超え + private 安全圏 (8.0-8.5) は妥当**。
+
+### exp006 postmortem (TabICL 投入失敗の分析)
+
+- 想定 best 9.7-10.0、実 LB 10.503 = **mid case を下回り** (= exp005 base からの正味マイナス +0.186 ft)
+- 仮説 1: TabICL OOF が karnakbaev 5-base より悪く、Ridge 6-base re-fit が positive 制約下で TabICL に低 weight 振っても、**他 5 base への weight 再分配で exp005 の最適 weight からズレ** (= weight constellation の劣化)
+- 仮説 2: GroupKFold(5) で TabICL OOF を生成したが、karnakbaev 5-base の OOF と **fold が一致してない** = blend に inconsistent weight
+- 仮説 3: TabICL の 4096 ctx + n_est=4 が full sample 学習を再現できず低品質
+- **学び**: 単に base model を増やすのではなく、**Edge Q (CV fold leak 解消) を先に入れる**べき。exp007 で先に Edge Q を投入、TabICL は後段で再評価
+- **対策**: exp007 では TabICL を一旦 dormant、Edge Q + Edge M + 自前 LGB×3+CB の 4-base re-fit に集中
 
 ## CV-LB Diff 監視
 
@@ -96,5 +135,5 @@ Kaggle 規定: **5 submissions per day** (UTC reset 00:00)。
 
 | date (UTC) | submissions used | 残 |
 |---|---|---|
-| 2026-05-10 | 3 (exp002 + exp003 + exp005) | 2 残 |
-| 2026-05-11 | 0 | 5 残 |
+| 2026-05-10 | 4 (exp002 + exp003 + exp005 + exp006) | 1 残 |
+| 2026-05-11 | 0 | 5 残 (exp007 + 検証 sub に投入予定) |
