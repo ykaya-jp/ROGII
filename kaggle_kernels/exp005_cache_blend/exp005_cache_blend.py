@@ -79,23 +79,37 @@ MODE = "infer"
 ACTIVE_MODELS = ["lgb0", "lgb1", "lgb2", "xgb", "cb"]
 
 # Debug flags
-DEBUG_MAX_WELLS    = None   # set to e.g. 10 for fast iteration
+# Allow env override for local smoke runs (= 5 wells in ~1 min vs 776 wells in ~10 min)
+import os as _os_dbg
+_ENV_DEBUG_MAX_WELLS = _os_dbg.environ.get("ROGII_DEBUG_MAX_WELLS")
+DEBUG_MAX_WELLS    = int(_ENV_DEBUG_MAX_WELLS) if _ENV_DEBUG_MAX_WELLS else None  # set to e.g. 10 for fast iteration
 DEBUG_ONE_FOLD     = False
 DEBUG_INSPECT_PF   = False
 DEBUG_INSPECT_BEAM = False
 
 # ─── Paths ───────────────────────────────────────────────────────────────────
+# Env override for local smoke runs (= takes precedence over Kaggle paths).
+import os as _os
+_ENV_DATA_DIR     = _os.environ.get("ROGII_DATA_DIR")
+_ENV_ARTEFACT_DIR = _os.environ.get("ROGII_ARTEFACT_DIR")
+_ENV_OUTPUT_DIR   = _os.environ.get("ROGII_OUTPUT_DIR")
+
 _KAGGLE_CANDIDATES = [
     Path("/kaggle/input/rogii-wellbore-geology-prediction"),
     Path("/kaggle/input/competitions/rogii-wellbore-geology-prediction"),
 ]
-DATA_DIR = next((p for p in _KAGGLE_CANDIDATES if (p / "test").exists()),
-                Path("../../data").resolve())
+if _ENV_DATA_DIR and Path(_ENV_DATA_DIR).exists():
+    DATA_DIR = Path(_ENV_DATA_DIR).resolve()
+else:
+    DATA_DIR = next((p for p in _KAGGLE_CANDIDATES if (p / "test").exists()),
+                    Path("../../data").resolve())
 TRAIN_DIR = DATA_DIR / "train"
 TEST_DIR  = DATA_DIR / "test"
 
 if MODE in ("train", "cv", "features_only", "ensemble_only"):
     ARTEFACT_DIR = Path("/kaggle/working/artefacts")
+elif _ENV_ARTEFACT_DIR and Path(_ENV_ARTEFACT_DIR).exists():
+    ARTEFACT_DIR = Path(_ENV_ARTEFACT_DIR).resolve()
 else:
     # Resolve artefacts dir robustly: Kaggle dataset attach standard puts the
     # dataset under `/kaggle/input/<slug>/` (so `artefacts/` lives directly
@@ -114,7 +128,8 @@ else:
                 ARTEFACT_DIR = sub.parent
                 break
 
-OUTPUT_DIR = Path("/kaggle/working")
+OUTPUT_DIR = Path(_ENV_OUTPUT_DIR).resolve() if _ENV_OUTPUT_DIR else Path("/kaggle/working")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True) if not str(OUTPUT_DIR).startswith("/kaggle") else None
 # Do NOT mkdir on a read-only Kaggle input path (only mkdir for /kaggle/working artefacts).
 if str(ARTEFACT_DIR).startswith("/kaggle/working") or str(ARTEFACT_DIR).startswith("/tmp"):
     ARTEFACT_DIR.mkdir(parents=True, exist_ok=True)
@@ -1485,12 +1500,16 @@ def edge_r_continued_train_lgb(
 
     base_params から lr × lr_mul、 early stopping 無効化、 objective 維持で
     `lgb.train(.., init_model=base_booster, num_boost_round=R)` を実行。
+    GPU device は continued training で OpenCL/CUDA 不在になりやすいので CPU 強制。
+    karnakbaev pretrained は CPU device で fit されている (= 互換性 OK)。
     """
     p = dict(base_params)
     p["learning_rate"] = float(p.get("learning_rate", 0.04)) * float(lr_mul)
-    # GPU/CPU は base と整合
     p.pop("n_estimators", None)
     p.pop("early_stopping_rounds", None)
+    # Edge R は CPU で続行: GPU continued training は API 不安定 + Kaggle CPU kernel でも問題なし
+    p["device_type"] = "cpu"
+    p.pop("gpu_use_dp", None)
     ds = lgb.Dataset(X_R, label=y_R)
     online = lgb.train(
         p, ds,

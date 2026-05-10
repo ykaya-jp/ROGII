@@ -279,24 +279,38 @@ EDGE_R_BLEND_W         = 0.5   # online と既存 path b blend の重ね合わ�
 EDGE_R_HARD_TIMEOUT_S  = 15 * 60  # 15 min hard cap on Edge R (= timeout 対策)
 
 # Debug flags
-DEBUG_MAX_WELLS    = None   # set to e.g. 3 for fast iteration
+# Allow env override for local smoke runs.
+import os as _os_dbg
+_ENV_DEBUG_MAX_WELLS = _os_dbg.environ.get("ROGII_DEBUG_MAX_WELLS")
+DEBUG_MAX_WELLS    = int(_ENV_DEBUG_MAX_WELLS) if _ENV_DEBUG_MAX_WELLS else None   # set to e.g. 3 for fast iteration
 DEBUG_ONE_FOLD     = False
 DEBUG_INSPECT_PF   = False
 DEBUG_INSPECT_BEAM = False
 DEBUG_SKIP_OWN_TRAIN = False  # if True, skip 自前 train and reuse karnakbaev OOF only
 
 # ─── Paths ───────────────────────────────────────────────────────────────────
+# Env override for local smoke runs (= takes precedence over Kaggle paths).
+import os as _os
+_ENV_DATA_DIR     = _os.environ.get("ROGII_DATA_DIR")
+_ENV_ARTEFACT_DIR = _os.environ.get("ROGII_ARTEFACT_DIR")
+_ENV_OUTPUT_DIR   = _os.environ.get("ROGII_OUTPUT_DIR")
+
 _KAGGLE_CANDIDATES = [
     Path("/kaggle/input/rogii-wellbore-geology-prediction"),
     Path("/kaggle/input/competitions/rogii-wellbore-geology-prediction"),
 ]
-DATA_DIR = next((p for p in _KAGGLE_CANDIDATES if (p / "test").exists()),
-                Path("../../data").resolve())
+if _ENV_DATA_DIR and Path(_ENV_DATA_DIR).exists():
+    DATA_DIR = Path(_ENV_DATA_DIR).resolve()
+else:
+    DATA_DIR = next((p for p in _KAGGLE_CANDIDATES if (p / "test").exists()),
+                    Path("../../data").resolve())
 TRAIN_DIR = DATA_DIR / "train"
 TEST_DIR  = DATA_DIR / "test"
 
 if MODE in ("train", "cv", "features_only", "ensemble_only"):
     ARTEFACT_DIR = Path("/kaggle/working/artefacts")
+elif _ENV_ARTEFACT_DIR and Path(_ENV_ARTEFACT_DIR).exists():
+    ARTEFACT_DIR = Path(_ENV_ARTEFACT_DIR).resolve()
 else:
     # Resolve artefacts dir robustly: Kaggle dataset attach standard puts the
     # dataset under `/kaggle/input/<slug>/` (so `artefacts/` lives directly
@@ -315,7 +329,8 @@ else:
                 ARTEFACT_DIR = sub.parent
                 break
 
-OUTPUT_DIR = Path("/kaggle/working")
+OUTPUT_DIR = Path(_ENV_OUTPUT_DIR).resolve() if _ENV_OUTPUT_DIR else Path("/kaggle/working")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True) if not str(OUTPUT_DIR).startswith("/kaggle") else None
 # Do NOT mkdir on a read-only Kaggle input path (only mkdir for /kaggle/working artefacts).
 if str(ARTEFACT_DIR).startswith("/kaggle/working") or str(ARTEFACT_DIR).startswith("/tmp"):
     ARTEFACT_DIR.mkdir(parents=True, exist_ok=True)
@@ -2754,11 +2769,18 @@ def edge_r_continued_train_lgb(
     num_boost_round: int = EDGE_R_NUM_BOOST,
     lr_mul: float = EDGE_R_LR_MUL,
 ):
-    """LightGBM continued training (warm start) for Edge R."""
+    """LightGBM continued training (warm start) for Edge R.
+
+    GPU device は continued training で API 不安定なため CPU 強制。
+    karnakbaev base は CPU で fit、 互換性 OK。
+    """
     p = dict(base_params)
     p["learning_rate"] = float(p.get("learning_rate", 0.04)) * float(lr_mul)
     p.pop("n_estimators", None)
     p.pop("early_stopping_rounds", None)
+    # Edge R は CPU で続行 (= GPU continued training の API 不安定回避)
+    p["device_type"] = "cpu"
+    p.pop("gpu_use_dp", None)
     # Edge R では huber objective を維持しない (= karnakbaev base は regression objective)
     # base と整合させるため objective は warm start で継承される
     ds = lgb.Dataset(X_R, label=y_R)
