@@ -1029,8 +1029,11 @@ def compute_edge_m_features(
         anchor_md = float(hmd[anchor]) if anchor < len(hmd) else last_md
         # delta from last visible: (anchor_md - last_md) × slope_md, then add (win_tvt[best] - last_tvt) shift
         delta_md  = anchor_md - last_md
-        sa_tvt    = float(win_tvt[best]) + slope_md * delta_md
-        sa_d      = sa_tvt - last_tvt
+        # Clip slope_md to physical range (= dTVT/dMD typical 0-2 for vertical, ~0 for horizontal)
+        # to avoid runaway extrapolation when prefix has spurious slope.
+        slope_md_clip = float(np.clip(slope_md, -1.0, 1.0))
+        sa_tvt    = float(win_tvt[best]) + slope_md_clip * delta_md
+        sa_d      = float(np.clip(sa_tvt - last_tvt, -200.0, 200.0))  # physical TVT delta cap
 
         # populate chunk
         out["selfaln_d"][c0:c1]              = np.float32(sa_d)
