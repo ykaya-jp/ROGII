@@ -1,0 +1,14 @@
+{
+  "id": "ky7240/rogii-exp005-cache-blend",
+  "title": "ROGII exp005 cache blend",
+  "code_file": "exp005_cache_blend.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "false",
+  "enable_tpu": "false",
+  "enable_internet": "false",
+  "dataset_sources": ["karnakbaevarthur/rogii-code-helper-dataset"],
+  "competition_sources": ["rogii-wellbore-geology-prediction"],
+  "kernel_sources": []
+}
