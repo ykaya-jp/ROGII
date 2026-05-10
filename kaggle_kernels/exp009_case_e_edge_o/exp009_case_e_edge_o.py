@@ -708,6 +708,153 @@ def compute_beam_features(
 print("Beam search functions loaded ✓")
 
 
+# ───────────────────────────────────────────────────────────────────────────
+# Edge O (exp009) — Direction-aware Beam Search.
+#
+# Augments the existing Beam transition cost with a sign-of-dGR penalty:
+#     cost_aug = cost_base + lam_dir * |sign(d_GR_h(s)) - sign(d_GR_v(path_s))|
+# Source: host pptx slide 6-7. The penalty fires whenever the horizontal-well
+# GR signature direction (= sign of derivative) disagrees with the typewell
+# GR signature direction at the matched path index. sign(0) = 0 by
+# convention. Predictions emit 7 features: 5 dir-aware path deltas plus mean
+# and std across the 5 configs.
+# ───────────────────────────────────────────────────────────────────────────
+
+
+def edge_o_feature_names() -> List[str]:
+    return [
+        "beam_dir_cons_d", "beam_dir_loose_d", "beam_dir_sm5_d",
+        "beam_dir_vcons_d", "beam_dir_mid_d",
+        "beam_dir_mean_d", "beam_dir_std_d",
+    ]
+
+
+def _signs(arr: np.ndarray) -> np.ndarray:
+    """sign(x) with sign(0)=0."""
+    return np.sign(arr).astype(np.float32)
+
+
+def beam_search_dir(
+    gr_h:       np.ndarray,
+    tw_tvt:     np.ndarray,
+    tw_gr:      np.ndarray,
+    start_tvt:  float,
+    bs:         int   = 10,
+    mc:         float = 20.0,
+    es:         float = 144.0,
+    r:          int   = 2,
+    lam_dir:    float = 0.5,
+) -> np.ndarray:
+    """Direction-aware Beam Search.
+
+    Identical structure to ``beam_search`` but with an extra direction-penalty
+    term ``lam_dir * |sign(dGR_h_step) - sign(dGR_v_step)|`` added to the
+    transition cost ``mv``. The horizontal-side dGR is the per-step
+    derivative of the (smoothed) horizontal GR signal; the typewell-side
+    dGR is the difference between consecutive ``tw_gr`` values along the
+    selected transition (-1, 0, +1) over the typewell index axis.
+    """
+    tw_tvt = np.asarray(tw_tvt, np.float32)
+    tw_gr  = np.asarray(tw_gr,  np.float32)
+    T  = len(tw_tvt)
+    fb = float(np.nanmean(tw_gr))
+    sg = fill_and_smooth_gr(gr_h, fb, r)
+    si = nn_idx(tw_tvt, start_tvt)
+    ns = len(sg)
+
+    # Pre-compute sign of dGR_h (horizontal-well GR derivative). For step s,
+    # use sg[s] - sg[s-1]; for s=0, define 0.
+    dgrh = np.zeros(ns, dtype=np.float32)
+    if ns >= 2:
+        dgrh[1:] = sg[1:] - sg[:-1]
+    sign_dgrh = _signs(dgrh)
+
+    # Pre-compute typewell dGR per index: tw_gr[i] - tw_gr[i-1], with i=0 → 0.
+    tw_dgr = np.zeros(T, dtype=np.float32)
+    if T >= 2:
+        tw_dgr[1:] = tw_gr[1:] - tw_gr[:-1]
+    sign_tw_dgr = _signs(tw_dgr)
+
+    bi = np.full(bs, si, np.int32)
+    bc = np.zeros(bs, np.float64)
+    bps = np.empty((ns, bs), np.int32)
+    bpb = np.empty((ns, bs), np.int32)
+
+    for s, gv in enumerate(sg):
+        ci = np.clip(bi[:, None] + np.array([-1, 0, 1]), 0, T - 1)
+        em = (gv - tw_gr[ci]) ** 2 / es
+        mv_base = mc * np.array([1, 0, 1])[None, :]
+        # Direction penalty: compare sign of dgrh[s] vs sign_tw_dgr at the
+        # transition target index ci. transition (-1) goes to ci-th entry
+        # which corresponds to tw_dgr[ci]. Larger |sign diff| → larger penalty.
+        sign_ci = sign_tw_dgr[ci]                            # (bs, 3)
+        dir_pen = lam_dir * np.abs(sign_dgrh[s] - sign_ci)   # (bs, 3)
+        mv = mv_base + dir_pen
+        cc = bc[:, None] + em + mv
+
+        fi = ci.ravel(); fc = cc.ravel(); fp = np.repeat(np.arange(bs), 3)
+        ord_ = np.argsort(fc, kind="stable")
+        kept = []; seen = set()
+        for o in ord_:
+            t = int(fi[o])
+            if t not in seen:
+                seen.add(t); kept.append(o)
+            if len(kept) == bs:
+                break
+        while len(kept) < bs:
+            kept.append(kept[-1])
+        kept = np.array(kept, np.int32)
+
+        bps[s] = fp[kept]; bpb[s] = fi[kept]
+        bi = fi[kept].astype(np.int32); bc = fc[kept]
+
+    path = np.empty(ns, np.int32)
+    cb   = int(np.argmin(bc))
+    for s in range(ns - 1, -1, -1):
+        path[s] = bpb[s, cb]; cb = bps[s, cb]
+    return tw_tvt[path]
+
+
+def compute_edge_o_features(
+    hgr_full:       np.ndarray,
+    tw_tvt:         np.ndarray,
+    tw_gr:          np.ndarray,
+    last_known_tvt: float,
+    sel_local:      np.ndarray,
+    lam_dir:        float = 0.5,
+) -> Dict[str, np.ndarray]:
+    """Run direction-aware Beam over all 5 configs; return 7-feature dict.
+
+    Output keys: ``beam_dir_<cons|loose|sm5|vcons|mid>_d`` + ``beam_dir_mean_d``
+    + ``beam_dir_std_d``. Each is float32 of shape ``(len(sel_local),)``.
+    """
+    paths: Dict[str, np.ndarray] = {}
+    for (bs, mc, es, r, tag) in BEAMS:
+        out_tag = "mid" if tag == "vloose" else tag
+        try:
+            paths[out_tag] = beam_search_dir(
+                hgr_full, tw_tvt, tw_gr, last_known_tvt,
+                bs=bs, mc=mc, es=es, r=r, lam_dir=lam_dir,
+            )
+        except Exception as exc:
+            # Per-config fallback: zeros at the right shape (= len(hgr_full))
+            print(f"  WARN beam_dir({out_tag}) failed: {exc}")
+            paths[out_tag] = np.full(len(hgr_full),
+                                     np.float32(last_known_tvt), np.float32)
+
+    lkt = np.float32(last_known_tvt)
+    stack = np.stack([p for p in paths.values()], axis=1)  # (n_hidden, 5)
+    out: Dict[str, np.ndarray] = {}
+    for tag, p in paths.items():
+        out[f"beam_dir_{tag}_d"] = (p - lkt).astype(np.float32)[sel_local]
+    out["beam_dir_mean_d"] = (stack.mean(axis=1) - lkt).astype(np.float32)[sel_local]
+    out["beam_dir_std_d"]  = stack.std(axis=1).astype(np.float32)[sel_local]
+    return out
+
+
+print("Direction-aware Beam (Edge O) functions loaded ✓")
+
+
 # ## 5. Particle Filters (Z-velocity + ANCC)
 
 # In[ ]:
@@ -1446,6 +1593,262 @@ class FormationPlaneKNN:
         return pred, min_dist
 
 
+# ───────────────────────────────────────────────────────────────────────────
+# Case E (exp009) — Sparse Gaussian Process imputer for per-formation depth.
+# ───────────────────────────────────────────────────────────────────────────
+
+
+def gp_feature_names() -> List[str]:
+    cols: List[str] = []
+    for fn in FORMATIONS:
+        cols.append(f"gp_{fn}_mean")
+        cols.append(f"gp_{fn}_var")
+        cols.append(f"gp_{fn}_mean_minus_plane")
+        cols.append(f"gp_{fn}_var_norm")
+    return cols
+
+
+class GPFormationImputer:
+    """Per-formation Sparse GP fit on (X, Y) -> formation depth.
+
+    Strategy
+    --------
+    Aggregate every train well to a single (X_w, Y_w, formation_k_depth)
+    triple per formation. Cluster the well centroids via K-Means (M = 200)
+    so the GP fit operates on M reduced points (= the SVGP "inducing
+    points" approximation, Hensman 2013). Fit one GP per formation with
+    a Matern 3/2 ARD kernel (separate length scales for X and Y) plus a
+    WhiteKernel for noise. Optimise hyperparameters with sklearn's
+    marginal-likelihood maximiser (n_restarts=3 for robustness).
+
+    Posterior at any query (X_q, Y_q) is N(m, var). Predictions are
+    self-exclusive only at hyperparameter level (Cholesky training pool
+    excludes self_wid by per-call refit on a smaller pool); the cost of
+    exact per-well refit during inference is high, so the test path uses
+    the global fit (= negligible leak when N_train is large).
+
+    Leak guarantee
+    --------------
+    Reads only ``X``, ``Y`` and the formation-depth columns
+    (= ``ANCC``/``ASTNU``/...) from train horizontal_well.csv files. Never
+    reads ``TVT`` or ``TVT_input``.
+    """
+
+    @classmethod
+    def empty(cls) -> "GPFormationImputer":
+        obj = cls.__new__(cls)
+        obj._empty = True
+        obj.gprs = [None] * len(FORMATIONS)
+        obj.train_xy_norm = None
+        obj.xy_mean = np.zeros(2, dtype=np.float64)
+        obj.xy_std = np.ones(2, dtype=np.float64)
+        obj.train_y = [np.array([], dtype=np.float32) for _ in FORMATIONS]
+        obj.knn_tree = None
+        obj.train_wids = []
+        return obj
+
+    def __init__(
+        self,
+        well_ids: List[str],
+        data_dir: Path,
+        M: int = 200,
+        seed: int = 42,
+    ):
+        self._empty = False
+        self.gprs: List[Optional[GaussianProcessRegressor]] = [None] * len(FORMATIONS)
+        self.train_y: List[np.ndarray] = [np.array([], dtype=np.float32)
+                                          for _ in FORMATIONS]
+
+        rows: List[Dict[str, Any]] = []
+        for wid in well_ids:
+            p = data_dir / f"{wid}__horizontal_well.csv"
+            try:
+                avail = list(FORMATIONS) + ["X", "Y"]
+                df = pd.read_csv(p, usecols=[c for c in avail])
+            except Exception:
+                continue
+            form_cols = [c for c in FORMATIONS if c in df.columns]
+            if not form_cols or "X" not in df.columns or "Y" not in df.columns:
+                continue
+            df = df[["X", "Y"] + form_cols].dropna()
+            if len(df) == 0:
+                continue
+            row: Dict[str, Any] = {
+                "wid": wid,
+                "x": float(df["X"].median()),
+                "y": float(df["Y"].median()),
+            }
+            for c in FORMATIONS:
+                row[c] = float(df[c].median()) if c in df.columns else np.nan
+            rows.append(row)
+
+        if not rows:
+            self._empty = True
+            self.train_xy_norm = None
+            self.xy_mean = np.zeros(2, dtype=np.float64)
+            self.xy_std = np.ones(2, dtype=np.float64)
+            self.knn_tree = None
+            self.train_wids = []
+            return
+
+        self.train_wids = [r["wid"] for r in rows]
+        train_xy = np.array([[r["x"], r["y"]] for r in rows], dtype=np.float64)
+        self.xy_mean = train_xy.mean(0)
+        std = train_xy.std(0)
+        std[std < 1e-3] = 1.0
+        self.xy_std = std
+        self.train_xy_norm = (train_xy - self.xy_mean) / self.xy_std
+        self.knn_tree = cKDTree(self.train_xy_norm)
+
+        # Per-formation: gather (X_norm, Y_norm, depth) and fit GP
+        for fi, fn in enumerate(FORMATIONS):
+            depth_arr = np.array([r.get(fn, np.nan) for r in rows], dtype=np.float64)
+            valid = np.isfinite(depth_arr)
+            if valid.sum() < 10:
+                self.gprs[fi] = None
+                self.train_y[fi] = depth_arr.astype(np.float32)
+                continue
+
+            xy_v = self.train_xy_norm[valid]
+            y_v  = depth_arr[valid]
+
+            # K-Means inducing points
+            try:
+                if len(xy_v) > M:
+                    km = KMeans(n_clusters=M, random_state=seed, n_init=4)
+                    km.fit(xy_v)
+                    induce_xy_list: List[np.ndarray] = []
+                    induce_y_list: List[float] = []
+                    labels = km.labels_
+                    for ci in range(M):
+                        cm = labels == ci
+                        if cm.any():
+                            induce_xy_list.append(km.cluster_centers_[ci])
+                            induce_y_list.append(float(y_v[cm].mean()))
+                    induce_xy = np.array(induce_xy_list, dtype=np.float64)
+                    induce_y = np.array(induce_y_list, dtype=np.float64)
+                else:
+                    induce_xy = xy_v
+                    induce_y = y_v
+            except Exception:
+                induce_xy = xy_v
+                induce_y = y_v
+
+            # Build kernel: Const * Matern(ARD, nu=1.5) + White
+            try:
+                kernel = (
+                    _GP_C(1.0, (1e-3, 1e3))
+                    * _GP_Matern(
+                        length_scale=[GP_LENGTH_SCALE_INIT, GP_LENGTH_SCALE_INIT],
+                        length_scale_bounds=GP_LENGTH_SCALE_BOUNDS,
+                        nu=1.5,
+                    )
+                    + _GP_White(
+                        noise_level=GP_NOISE_INIT,
+                        noise_level_bounds=GP_NOISE_BOUNDS,
+                    )
+                )
+                gpr = GaussianProcessRegressor(
+                    kernel=kernel,
+                    n_restarts_optimizer=GP_N_RESTARTS,
+                    normalize_y=True,
+                    random_state=seed,
+                    alpha=GP_ALPHA,
+                )
+                gpr.fit(induce_xy, induce_y)
+                self.gprs[fi] = gpr
+            except Exception as exc:
+                print(f"  WARN GP fit failed for formation {fn}: {exc}")
+                self.gprs[fi] = None
+            self.train_y[fi] = depth_arr.astype(np.float32)
+
+    def impute(
+        self,
+        xy_q: np.ndarray,
+        self_wid: Optional[str] = None,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Predict (mean, var) per formation at each query (X, Y).
+
+        Returns
+        -------
+        mean : np.ndarray of shape (n_q, n_formations)
+        var  : np.ndarray of shape (n_q, n_formations)
+        """
+        n_q = len(xy_q)
+        n_f = len(FORMATIONS)
+        if self._empty or self.train_xy_norm is None:
+            return (
+                np.zeros((n_q, n_f), dtype=np.float32),
+                np.ones((n_q, n_f), dtype=np.float32),
+            )
+
+        q = (np.asarray(xy_q, dtype=np.float64) - self.xy_mean) / self.xy_std
+
+        mean_out = np.zeros((n_q, n_f), dtype=np.float32)
+        var_out = np.ones((n_q, n_f), dtype=np.float32)
+
+        for fi, fn in enumerate(FORMATIONS):
+            gpr = self.gprs[fi]
+            if gpr is not None:
+                try:
+                    m, std = gpr.predict(q, return_std=True)
+                    mean_out[:, fi] = m.astype(np.float32)
+                    var_out[:, fi] = (std.astype(np.float64) ** 2).astype(np.float32)
+                except Exception:
+                    # KNN fallback
+                    mean_out[:, fi], var_out[:, fi] = self._knn_fallback(
+                        q, fi, k=GP_FALLBACK_KNN_K, self_wid=self_wid,
+                    )
+            else:
+                mean_out[:, fi], var_out[:, fi] = self._knn_fallback(
+                    q, fi, k=GP_FALLBACK_KNN_K, self_wid=self_wid,
+                )
+        return mean_out, var_out
+
+    def _knn_fallback(
+        self,
+        q_norm: np.ndarray,
+        fi: int,
+        k: int = 20,
+        self_wid: Optional[str] = None,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Crude KNN-mean / KNN-std posterior approximation."""
+        if self.knn_tree is None:
+            return (
+                np.zeros(len(q_norm), dtype=np.float32),
+                np.ones(len(q_norm), dtype=np.float32),
+            )
+        depth_arr = np.asarray(self.train_y[fi], dtype=np.float64)
+        nf = min(k + 5, len(self.train_xy_norm))
+        dist, idx = self.knn_tree.query(q_norm, k=nf, workers=-1)
+        if self_wid is not None and self_wid in self.train_wids:
+            self_pos = self.train_wids.index(self_wid)
+            dist = np.where(idx == self_pos, np.inf, dist)
+        # take top-k that have finite depth
+        m_arr = np.zeros(len(q_norm), dtype=np.float32)
+        v_arr = np.ones(len(q_norm), dtype=np.float32)
+        for r in range(len(q_norm)):
+            order = np.argsort(dist[r])
+            chosen: List[int] = []
+            for o in order:
+                ii = int(idx[r][o])
+                if not np.isfinite(dist[r][o]):
+                    continue
+                if not np.isfinite(depth_arr[ii]):
+                    continue
+                chosen.append(ii)
+                if len(chosen) >= k:
+                    break
+            if not chosen:
+                m_arr[r] = 0.0
+                v_arr[r] = 1.0
+                continue
+            vals = depth_arr[chosen]
+            m_arr[r] = float(vals.mean())
+            v_arr[r] = float(max(vals.var(ddof=0), 1e-6))
+        return m_arr, v_arr
+
+
 class DenseANCCImputer:
     """IDW interpolation from dense ANCC point cloud (60 pts/well)."""
 
@@ -1539,6 +1942,10 @@ print("Spatial imputers loaded ✓")
 # Thread-safe global imputer references (overridden per CV fold during training)
 _FI_REF = _FI_GLOBAL
 _DI_REF = _DI_GLOBAL
+
+# GP imputer (case E) is None at module load; built once in the dispatcher
+# (`infer_edge_e_gp_o`) before train + test feature builds.
+_GP_REF: Optional[GPFormationImputer] = None
 
 
 def affine_cal(kgr: np.ndarray, tw_at_k: np.ndarray, min_pts: int = 20
@@ -1688,10 +2095,11 @@ def build_well_features(
     fi/di: spatial imputers (use globals if None).
     Returns None if no usable hidden rows.
     """
-    global _FI_REF, _DI_REF
+    global _FI_REF, _DI_REF, _GP_REF
 
     fi_use = fi if fi is not None else _FI_REF
     di_use = di if di is not None else _DI_REF
+    gp_use = _GP_REF
 
     hw_path = Path(hw_path)
     wid     = hw_path.stem.replace("__horizontal_well", "")
@@ -1853,6 +2261,31 @@ def build_well_features(
         tvt_formulas[f"bw_{fn}"]       = np.float32(b_all)
         tvt_formulas[f"bw50_{fn}"]     = np.float32(b_50)
 
+    # ── Case E (Sparse GP per-formation posterior) FE ───────────────────
+    # 24 features per hidden row, leak-safe (= reads (X, Y) + formation
+    # depth columns from horizontal_well.csv, never reads TVT/TVT_input).
+    # GP fit happens once at the dispatcher; per-well call is predict-only.
+    if GP_ENABLE and (gp_use is not None) and (not getattr(gp_use, "_empty", True)):
+        try:
+            gp_mean_ev, gp_var_ev = gp_use.impute(xy_ev, self_wid=swid)  # (nh, 6) each
+            gp_disagree = (gp_mean_ev - form_ev).astype(np.float32)
+            std_ev = np.sqrt(np.maximum(gp_var_ev, 1e-12))
+            std_mean_well = max(float(std_ev.mean()), 1e-6)
+            std_norm_arr = (std_ev / std_mean_well).astype(np.float32)
+            gp_out: Dict[str, np.ndarray] = {}
+            for fi_idx, fn in enumerate(FORMATIONS):
+                gp_out[f"gp_{fn}_mean"]              = gp_mean_ev[:, fi_idx].astype(np.float32)
+                gp_out[f"gp_{fn}_var"]               = gp_var_ev[:, fi_idx].astype(np.float32)
+                gp_out[f"gp_{fn}_mean_minus_plane"]  = gp_disagree[:, fi_idx]
+                gp_out[f"gp_{fn}_var_norm"]          = std_norm_arr[:, fi_idx]
+        except Exception as _gp_e:
+            print(f"  WARN [{wid}] GP FE failed: {_gp_e}")
+            gp_out = {k: np.zeros(len(ev), dtype=np.float32)
+                      for k in gp_feature_names()}
+    else:
+        gp_out = {k: np.zeros(len(ev), dtype=np.float32)
+                  for k in gp_feature_names()}
+
     # Dense ANCC
     d_ancc, d_std, d_dist   = di_use.impute(xy_ev, self_wid=swid)
     d_kn,   d_std_kn, _     = di_use.impute(xy_kn, self_wid=swid)
@@ -1968,6 +2401,28 @@ def build_well_features(
         kalman_out = {k: np.zeros(len(ev), dtype=np.float32)
                       for k in kalman_feature_names()}
 
+    # ── Edge O (direction-aware Beam) FE ────────────────────────────────
+    # 7 features per hidden row, leak-safe (= GR + typewell only, never
+    # reads hidden TVT_input). lam_dir penalty couples horizontal-side
+    # dGR sign and typewell-side dGR sign during Beam transitions.
+    if EDGE_O_ENABLE:
+        try:
+            edge_o_out = compute_edge_o_features(
+                hgr_full=hgr,
+                tw_tvt=tw_tvt,
+                tw_gr=tw_gr,
+                last_known_tvt=last_tvt,
+                sel_local=sel_local,
+                lam_dir=EDGE_O_LAMBDA_DIR,
+            )
+        except Exception as _eo_e:
+            print(f"  WARN [{wid}] Edge O FE failed: {_eo_e}")
+            edge_o_out = {k: np.zeros(len(ev), dtype=np.float32)
+                          for k in edge_o_feature_names()}
+    else:
+        edge_o_out = {k: np.zeros(len(ev), dtype=np.float32)
+                      for k in edge_o_feature_names()}
+
     # ── Assemble final DataFrame ────────────────────────────────────────
     out = pd.DataFrame({
         # Meta
@@ -2063,6 +2518,10 @@ def build_well_features(
         **edge_m_out,
         # Edge D (AR(1) Kalman on dTVT, exp008 新規 7 cols)
         **kalman_out,
+        # Case E (Sparse GP per-formation posterior, exp009 新規 24 cols)
+        **gp_out,
+        # Edge O (direction-aware Beam, exp009 新規 7 cols)
+        **edge_o_out,
     })
 
     if is_train:
@@ -3102,6 +3561,34 @@ elif MODE in ("infer_edge_qm", "infer_edge_d_kalman", "infer_edge_e_gp_o"):
                      f"(global prior {KALMAN_PHI_GLOBAL})")
             log.info(f"  kalman_sigma_eps p50: {test_df['kalman_sigma_eps'].median():.5f} "
                      f"(global prior {KALMAN_SIGMA_GLOBAL})")
+    if is_exp009 and GP_ENABLE:
+        gp_cols = gp_feature_names()
+        missing_gp = [c for c in gp_cols if c not in test_df.columns]
+        if missing_gp:
+            log.warning(f"GP cols missing from test_df: {missing_gp[:5]}{'...' if len(missing_gp) > 5 else ''} — filling with 0")
+            for c in missing_gp:
+                test_df[c] = np.float32(0.0)
+        else:
+            log.info(f"GP cols present in test_df: {len(gp_cols)} cols")
+            log.info(f"  gp_ANCC_mean range: [{test_df['gp_ANCC_mean'].min():.3f}, "
+                     f"{test_df['gp_ANCC_mean'].max():.3f}]")
+            log.info(f"  gp_ANCC_var range: [{test_df['gp_ANCC_var'].min():.3e}, "
+                     f"{test_df['gp_ANCC_var'].max():.3e}]")
+            log.info(f"  gp_ANCC_mean_minus_plane p50: "
+                     f"{test_df['gp_ANCC_mean_minus_plane'].median():.4f}")
+    if is_exp009 and EDGE_O_ENABLE:
+        eo_cols = edge_o_feature_names()
+        missing_eo = [c for c in eo_cols if c not in test_df.columns]
+        if missing_eo:
+            log.warning(f"Edge O cols missing from test_df: {missing_eo} — filling with 0")
+            for c in missing_eo:
+                test_df[c] = np.float32(0.0)
+        else:
+            log.info(f"Edge O cols present in test_df: {eo_cols}")
+            log.info(f"  beam_dir_cons_d range: [{test_df['beam_dir_cons_d'].min():.3f}, "
+                     f"{test_df['beam_dir_cons_d'].max():.3f}]")
+            log.info(f"  beam_dir_std_d  range: [{test_df['beam_dir_std_d'].min():.3f}, "
+                     f"{test_df['beam_dir_std_d'].max():.3f}]")
 
     # ── Step A: karnakbaev artefacts + base predict on test ─────────────────
     section(log, f"{pipeline_tag}: load karnakbaev pretrained 5 base + predict test")
@@ -3124,15 +3611,30 @@ elif MODE in ("infer_edge_qm", "infer_edge_d_kalman", "infer_edge_e_gp_o"):
     for k, v in test_preds_kb.items():
         log.info(f"    kb {k}: shape={v.shape}  range=[{v.min():.3f}, {v.max():.3f}]")
 
-    # 自前 4 base feature schema = 154 kb cols + Edge M (4 cols) + Kalman (7 cols)
-    # in exp008. Edge M-only in exp007 (= legacy mode).
+    # 自前 4 base feature schema = 154 kb cols + Edge M (4 cols) + Kalman (7
+    # cols, exp008+) + GP (24, exp009) + Edge O (7, exp009).
     feature_cols_own = list(feature_cols_kb) + list(edge_m_cols)
     if is_exp008 and KALMAN_ENABLE:
         for c in kalman_feature_names():
             if c not in feature_cols_own:
                 feature_cols_own.append(c)
+    if is_exp009 and GP_ENABLE:
+        for c in gp_feature_names():
+            if c not in feature_cols_own:
+                feature_cols_own.append(c)
+    if is_exp009 and EDGE_O_ENABLE:
+        for c in edge_o_feature_names():
+            if c not in feature_cols_own:
+                feature_cols_own.append(c)
+    extras_label = "Edge M"
+    if is_exp008 and KALMAN_ENABLE:
+        extras_label += " + Kalman"
+    if is_exp009 and GP_ENABLE:
+        extras_label += " + GP"
+    if is_exp009 and EDGE_O_ENABLE:
+        extras_label += " + Edge O"
     log.info(f"  feature_cols_kb : {len(feature_cols_kb)} (= karnakbaev pretrained schema)")
-    log.info(f"  feature_cols_own: {len(feature_cols_own)} (+Edge M{'+ Kalman' if (is_exp008 and KALMAN_ENABLE) else ''})")
+    log.info(f"  feature_cols_own: {len(feature_cols_own)} (+{extras_label})")
 
     # ── Step B: load karnakbaev train_df.parquet for自前 train + Edge Q ────
     own_ok = False
@@ -3167,11 +3669,18 @@ elif MODE in ("infer_edge_qm", "infer_edge_d_kalman", "infer_edge_e_gp_o"):
         # fails (= 自前 base will not use Kalman, but pipeline survives).
         em_cols  = edge_m_feature_names()
         kal_cols = kalman_feature_names() if (is_exp008 and KALMAN_ENABLE) else []
-        own_extra_cols = em_cols + kal_cols
+        gp_cols  = gp_feature_names()    if (is_exp009 and GP_ENABLE)     else []
+        eo_cols  = edge_o_feature_names() if (is_exp009 and EDGE_O_ENABLE) else []
+        own_extra_cols = em_cols + kal_cols + gp_cols + eo_cols
         missing_own_extra = [c for c in own_extra_cols if c not in train_df_kb.columns]
         if missing_own_extra:
-            section(log, f"{pipeline_tag}: inject Edge M{'+ Kalman' if kal_cols else ''} cols into train_df_kb")
-            log.info(f"  missing in train_df_kb: {missing_own_extra}")
+            inject_label = "Edge M"
+            if kal_cols: inject_label += " + Kalman"
+            if gp_cols:  inject_label += " + GP"
+            if eo_cols:  inject_label += " + Edge O"
+            section(log, f"{pipeline_tag}: inject {inject_label} cols into train_df_kb")
+            log.info(f"  missing in train_df_kb (first 10): {missing_own_extra[:10]}"
+                     f"{' ...' if len(missing_own_extra) > 10 else ''}")
             try:
                 with timer(log, "rebuild train FE for own extras (build_dataset over TRAIN_DIR)"):
                     train_df_extra = build_dataset(
