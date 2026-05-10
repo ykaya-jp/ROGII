@@ -166,6 +166,22 @@ karnakbaev artifacts blend の test pred が既に grid 化されている可能
 3. exp009 を同様に順次 push
 4. **submit はしない**: submit quota 残 0 (= UTC 5/11 reset 後に中央判断)
 
+### 7.1 push 実績 (= 2026-05-11 UTC)
+
+| 順 | kernel | push 結果 | 備考 |
+|---|---|---|---|
+| 1 | exp005 v2 | **成功** | CPU, `KernelWorkerStatus.RUNNING` 移行確認 |
+| 2 | exp008 v2 | **成功** | GPU, `KernelWorkerStatus.RUNNING` 移行確認 |
+| 3 | exp009 v2 | **保留** | GPU 2 上限到達 (= exp008 v2 + exp009 v1 占有)。exp008 か exp009 v1 完了後に retry 必要 |
+
+### 7.2 exp009 v2 retry 方針
+
+- exp009 v1 (= GP + Edge O のみ、subagent M が push 済) と exp008 v2 が GPU 2 上限を占有
+- exp008 v2 は GPU で約 1-2 時間予想 (= 自前 LGB×3+CB の 5-fold 学習)
+- exp009 v1 は subagent M smoke で「est full-train FE 54min」と報告 → 既に **数時間経過しているはず → 完了間近**
+- どちらか先に COMPLETE になり次第、 `.venv/bin/kaggle kernels push -p kaggle_kernels/exp009_case_e_edge_o/` で v2 push
+- 本 subagent P のセッション内で polling 待機 (= 最大 30 分まで)、それを超えたら **中央に handoff**
+
 ---
 
 ## 8. license / 帰属
