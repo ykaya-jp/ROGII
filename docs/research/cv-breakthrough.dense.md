@@ -2,7 +2,7 @@
 
 > **目的**: ROGII Wellbore Geology Prediction (賞金 $50K、1 位 $25K、残 86 日)。ユーザー指示「9 切らないと優勝は無理、CV 8 台必須」 = CV を **10.39 → 8.5 以下** に下げるための **paradigm shift level の構造変革** 候補を列挙する。
 >
-> **方針**: `docs/research/independent-edges.dense.md` の Edge D-O (累積で「mid case CV 想定 8.75-9.0、Top 1 9.256 ぎりぎり」) を **超える** 構造原理を 10 track 提示する。推奨は出さない (CLAUDE.md 智者尽其慮 / 反証思考)、**選択軸とトレードオフ** のみ。判断は中央 (= ユーザー対応 Claude) が行う。
+> **方針**: `docs/research/independent-edges.dense.md` の Edge D-O (累積で「mid case CV 想定 8.75-9.0、Top 1 9.256 ぎりぎり」) を **超える** 構造原理を 12 track 提示する (= Track 1-10 + 追加 Track 11 [Diffusion] + Track 12 [Geometry 2-stage])。推奨は出さない (CLAUDE.md 智者尽其慮 / 反証思考)、**選択軸とトレードオフ** のみ。判断は中央 (= ユーザー対応 Claude) が行う。
 >
 > **対象範囲**: paradigm shift = `independent-edges.dense.md §0.1` 表で **複数行を超える** 構造変更 (= 推論パラダイム、時系列構造、学習信号、推論時計算、不確実性のいずれか 2 つ以上が同時に変わる)。同一 paradigm 内の hyperparam バリエーションは入れない。
 
@@ -71,7 +71,7 @@ exp005 base:                                  LB 10.317
 4. **失敗モード 3 つ + 各々への対策**: 反証思考で先に殴る
 5. **既存 edge との合成可能性** を 1-2 行で評価
 
-以下、構造原理が異なる 10 track を提示する。
+以下、構造原理が異なる 12 track (= Track 1-10 が主、Track 11 [Diffusion] / Track 12 [Geometry 2-stage] を補完) を提示する。
 
 ---
 
