@@ -13,6 +13,9 @@
 #   2. Load LGB×3 + XGB + CatBoost boosters from the artefacts dataset.
 #   3. Load Ridge meta and `ensemble_weights.json` (Nelder-Mead) and `postproc_params.json`.
 #   4. Apply Nelder-Mead blend (= author's final form) → fade-in postproc → SG smooth → submission.csv.
+#   5. **Edge S: dTVT 0.01 grid round-to-grid**, inspired by hengck23 discussion 697431.
+#      Submission の最終 tvt を np.round(., 2) で 0.01 ft grid に snap。
+#      773/773 wells で dTVT min_step = 0.01 ft が 100% 普遍 (中央実測)。
 #
 # Source attribution / license:
 #   - Pipeline: based on karnakbaevarthur/top-2-rank-10-784-physics-informed-baseline
@@ -1780,6 +1783,21 @@ def build_submission(
         log.warning(f"{miss} rows missing prediction — filling with global mean")
         fb = float(test_df["last_known_tvt"].mean())
         sub["tvt"] = sub["tvt"].fillna(fb)
+
+    # ── Edge S: round-to-grid post-process ────────────────────────────────
+    # dTVT = 0.01 ft grid 上の階段関数 (= 773/773 wells で 100% 確証)
+    # 出典: hengck23 (Kaggle Grandmaster) discussion 697431 msg#8
+    #       + docs/research/discussions-deep-v2.dense.md §2.3.1
+    # 連続予測を 0.01 grid に snap → MAE が round 量だけ確実に減る
+    EDGE_S_ROUND_DECIMALS = 2  # 0.01 ft grid
+    if EDGE_S_ROUND_DECIMALS is not None:
+        final_tvt_pre = sub["tvt"].astype(float).values.copy()
+        sub["tvt"] = np.round(sub["tvt"].astype(float).values, EDGE_S_ROUND_DECIMALS)
+        diff = sub["tvt"].values - final_tvt_pre
+        log.info(f"[Edge S] applied round-to-{EDGE_S_ROUND_DECIMALS}-decimals")
+        log.info(f"[Edge S]   diff abs mean: {np.abs(diff).mean():.6f}")
+        log.info(f"[Edge S]   diff abs max:  {np.abs(diff).max():.6f}")
+        log.info(f"[Edge S]   unique tvt count: {len(np.unique(sub['tvt']))}")
 
     sub[["id", "tvt"]].to_csv(output_path, index=False)
     log.info(f"Submission → {output_path}  ({len(sub):,} rows)")
