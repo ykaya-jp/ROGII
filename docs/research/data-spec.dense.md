@@ -28,6 +28,7 @@
 - 含意:
   - CV 設計は「**well 内の終盤を hidden 模倣**」で OK (各 well で末端 ~75% を mask して訓練)
   - GroupKFold by well_id だけでは不十分。**well 内マスク** も併用
+  - **更に typewell hash で stratify** が必要 (= 同一 typewell を共有する 13 group / 34 wells、§10 参照、`data/processed/typewell_groups.parquet` の `group_id` を sklearn `GroupKFold(groups=group_id)` に渡す)
 
 ### visible 比率
 
@@ -42,6 +43,21 @@
   - 案 B Transformer も visible 部分が短いので **typewell との cross-attention** が決め手
 
 ## 2. TVT 値域 (train, target 列)
+
+### 2.0 TVT 公式定義 (2026-05-10 更新、出典: discussion 698282 ROGII 公式回答 + PowerPoint Slide 5-7)
+
+- **TVT = "geology of the wellbore"** = **virtual / imaginary reference line までの vertical distance** (PowerPoint Slide 3 + discussion 698282 msg4)
+- **TVT=0 が ground level かは未確定** (固定ではなく地質構造に追随する)
+- **lateral と typewell の TVT 軸は対応する** (lateral-typewell pair ごと)。typewell は同一 reference line を **vertical 視点** で観測したもの
+- **物理モデル**: `TVT(s) = -Z(s) + b_well + ε(s)` の `b_well` は **well 表面 (= 地表点) における virtual reference line の offset**。`first-principles.dense.md` §1.4 の `b_well` と同一
+- **PowerPoint Slide 6 の核心知見**: 同じ GR signature が typewell と match しても **TVT 増加方向と減少方向の 2 通り** がある (drillhead が horizon を上下どちら方向に切るかで反対、discussion 697431 msg8 の DTW reverse index と整合)
+- **Slide 7**: GR signature が constant な lateral 区間では TVT も constant (= 同一 layer 内 lateral 進行)
+- **含意**:
+  - `b_well` は per-well 1 定数で扱う近似が物理的に正当 (`first-principles.dense.md` §5)
+  - pure xcorr alignment は **方向情報を別途 prior** として与えないと曖昧 (visible 末端 dTVT 符号を local prior にする提案 = `host-resources.dense.md` H1)
+  - PatrickAIForFun (discussion 698282 msg2) の独立検証 `ANCC - Z = TVT + offset_per_well` は本物理モデルの帰結
+
+### 2.1 値域
 
 - TVT min: **9245.19** ft
 - TVT max: **12893.89** ft
@@ -135,7 +151,58 @@
 | typewell カバレッジ | 不明 | **98.3% カバー、1.7% (13 wells) は edge case** |
 | Geology 列 | aux | train 時のみ aux supervision、6 layer median |
 | `ANCC/ASTNU/EGFDU/EGFDL/BUDA` | train only と仮定 | **確定**: test では無し ⇒ 直接特徴禁止、train 時 aux supervision としては使用可 |
-| CV 戦略 | GroupKFold | **GroupKFold by well_id + 各 well 内で末端 visible_ratio (= median 74%) を hidden 模倣** |
+| CV 戦略 | GroupKFold | **GroupKFold by `group_id` (= typewell hash group, §10b) + 各 well 内で末端 visible_ratio (= median 74%) を hidden 模倣** |
+
+## 10b. typewell duplicate group (2026-05-10 追加)
+
+> **発火元**: discussion topic 698449 (ROGII 公式回答 v=2、2026-05-10) 「project 内 typewells の一部は **pseudo-typewell** (隣接 lateral から作った interpretation)」
+> **検証**: 全 773 train typewell を `md5(TVT, GR, Geology bytes, NaN-normalised, 4 桁丸め)` で fingerprint → group 化
+> **再現スクリプト**: `notebooks/_typewell_groups_build.py` (`uv run python notebooks/_typewell_groups_build.py`)
+> **生成物**: `data/processed/typewell_groups.parquet` (gitignored、773 rows × 9 cols)
+
+### 10b.1 統計
+
+| 指標 | 値 |
+|---|---|
+| 全 train wells | 773 |
+| unique typewell hash | 752 |
+| duplicate group 数 | **13** (= discussion 698449 の手動発見と完全一致 13/13) |
+| duplicate group 内の wells 合計 | 34 / 773 = **4.4%** |
+
+### 10b.2 group_size 分布
+
+| group_size | group 数 | wells 合計 |
+|---|---|---|
+| 1 (unique) | 739 | 739 |
+| 2 | 12 | 24 |
+| **10** | 1 | 10 |
+
+最大 group (size=10) は **TVT 11782.62-12285.10 ft, n_rows=1006** の typewell を `02e7fe5a, 10b89021, 3417285d, 6ae68655, 7993a768, bc4381e2, ecdab904, f021b650, f49fdea3, f88ddb26` の 10 lateral wells が共有。
+
+### 10b.3 CV 設計への含意
+
+- **leakage source**: well_id GroupKFold で fold 分割すると、同一 typewell の lateral 群が train/val 両側に出現 → val の「typewell 答え」が train から漏れる
+- **正しい運用**: `data/processed/typewell_groups.parquet` の `group_id` 列を `sklearn.model_selection.GroupKFold(groups=group_id)` に渡す
+  ```python
+  import pandas as pd
+  from sklearn.model_selection import GroupKFold
+  tg = pd.read_parquet("data/processed/typewell_groups.parquet")
+  groups = df_train.merge(tg[["well_id", "group_id"]], on="well_id")["group_id"].values
+  for tr, va in GroupKFold(n_splits=5).split(df_train, groups=groups):
+      ...
+  ```
+- **loss weight 候補**: `is_duplicate=True` (= pseudo-typewell の可能性が高い 34 wells) は **ground truth `manualTVT` 自体が他 lateral からの interpretation** で誤差が乗っている (PowerPoint Slide 14 = `manualTVT` は人手 interpretation) → loss を 0.7-0.8x に縮小する変種を試す価値あり (= `host-resources.dense.md` H6 と整合)
+
+### 10b.4 column 仕様 (`typewell_groups.parquet`)
+
+| 列 | 型 | 説明 |
+|---|---|---|
+| `well_id` | str | horizontal well ID (8 chars) |
+| `typewell_hash` | str | md5 of (TVT, GR, Geology bytes), 32 chars |
+| `group_id` | str | 同 hash 内で min(well_id) を group 代表 ID として使用 |
+| `group_size` | int | 当該 hash を共有する well 数 (1, 2, または 10) |
+| `is_duplicate` | bool | `group_size > 1` |
+| `n_rows`, `tvt_min`, `tvt_max`, `has_geology` | misc | typewell content sanity 用 |
 
 ## 11. 詳細データ
 
