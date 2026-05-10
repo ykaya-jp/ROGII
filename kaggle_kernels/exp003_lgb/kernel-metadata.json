@@ -1,6 +1,6 @@
 {
   "id": "ky7240/rogii-exp003-lgb-tysig",
-  "title": "ROGII exp003 LGB tysig (xcorr + multi-scale SC + WLS)",
+  "title": "ROGII exp003 LGB tysig",
   "code_file": "exp003_lgb.py",
   "language": "python",
   "kernel_type": "script",
