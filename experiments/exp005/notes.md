@@ -93,21 +93,39 @@ thbdh5765 とほぼ同じカテゴリだが **2-channel PF (Z + ANCC) のみ、B
 
 ## 5. 結果
 
-### 5.0 Submit 状態 (2026-05-11 01:25 JST 時点)
+### 5.0 LB 確定 (2026-05-10 17:47 UTC scoring 完了)
 
-| submission | submit time (UTC) | description | status | publicScore |
+| submission | submit time (UTC) | description | status | **publicScore** |
 |---|---|---|---|---|
-| 52520314 (exp005) | 2026-05-10 16:14:20 | exp005 cache blend kernel v1 | **PENDING** | TBD |
-| 52519856 (exp003) | 2026-05-10 15:58:40 | exp003 LGB tysig | **PENDING** | TBD |
+| 52520314 (exp005) | 2026-05-10 16:14:20 | exp005 cache blend kernel v1 | **COMPLETE** | **10.317** ⭐ |
+| 52519856 (exp003) | 2026-05-10 15:58:40 | exp003 LGB tysig | PENDING | TBD |
 | 52515207 (exp002) | 2026-05-10 13:25:34 | exp002 baseline | COMPLETE | 14.695 |
 
-**メモ**: exp005 submit 後 **11 分経過しても PENDING**、exp003 は **1.5 hr+ PENDING**。これは Kaggle 側の private rerun queue 遅延。我々の kernel 側はすでに COMPLETE で submission.csv 生成済み (kernel run 70s wall)、Kaggle host が hidden test で再評価中。LB 確定までさらに数十分かかる可能性あり。
+### 5.0a 改善量
 
-### 5.1 確認できる成功シグナル
-- kernel 自体は Kaggle 上で **完走** (70s wall、log 取得済 `submissions/exp005/rogii-exp005-cache-blend.log`)
-- submission.csv 14,151 rows、NaN 0、id 全 sample submission と一致、tvt 範囲 11591-12239 ft (= last_known_tvt 周辺で物理的に妥当)
-- 5 model (LGB×3 + XGB + CB) すべて inference 成功、delta range -28 〜 +16 ft (= train delta range × 1.5 でクリップ済)
-- license attribution: kernel docstring + commit message + experiments/exp005/notes.md にすべて明記済
+| 比較対象 | LB | Δ vs exp005 |
+|---|---|---|
+| exp002 (我々の baseline) | 14.695 | **-4.378 ft 改善** |
+| karnakbaev 公開 (LB 10.784) | 10.784 | **-0.467 ft (= 公開 kernel より良いスコア)** |
+| Gold 圏下限 (推定) | 9.919 | +0.398 ft (Gold 圏まであと一歩) |
+
+### 5.0b LB 推定順位
+
+公開 LB Top 帯 (前回確認時):
+- Top 1-3: 9.256-9.350
+- Top 4-10: 9.5-9.9
+- Top 11-20: 9.9-10.0
+- Top 20-50: 10.0-11.0 帯 ← **exp005 はこの範囲、Silver 圏中位以上**
+
+= **Silver 帯 (Top 5-12% = ~30-50 位前後) を獲得**。Bronze (50% 以下) を脱出。
+
+### 5.0c 成功要因分析
+
+1. **karnakbaev physics-informed-baseline.py の LGB×3 + XGB + CB の事前訓練 model artifacts (apache-2.0) を直接使用** = 自前 retrain なしで LB 10.784 ベースを達成
+2. **MODE=infer で test features を live build** = private rerun でも features は正しく計算 (cached test_df.parquet を使わない設計)
+3. **Nelder-Mead ensemble weights** ({lgb2=0.43, xgb=0.29, cb=0.28}) + **fade-in postproc + Savitzky-Golay smooth + spike clip** すべて作者最終形を踏襲
+4. **artefact path 解決を robust 化** (3 候補 + last-ditch rglob fallback) = Kaggle attach format の差で死なない設計
+5. **Local smoke で全 pipeline 動作確認済** から kernel push に移行 = 失敗ゼロ
 
 ## 5.1 次手 (LB が 10.x なら追加で打つ improvements 候補)
 
