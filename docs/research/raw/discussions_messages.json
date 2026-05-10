@@ -1,0 +1,590 @@
+{
+  "697416": [
+    {
+      "id": 3453812,
+      "post_date": "2026-05-06 00:04:21.663000",
+      "content": "<p>We (ROGII) are excited to welcome you to this challenge.</p>\n<p>The presented dataset is a very typical example of modern horizontal drilling data. It contains the well trajectory along with Gamma Ray (GR) measurements collected along the wellbore. This dataset can be confidently interpreted by an experienced human interpreter.</p>\n<p>We look forward to the results of this competition, as they may help enable automation during the well drilling process.</p>\n<p>We strongly encourage you to <strong>review the PowerPoint presentation attached to the competition data</strong>, as it contains key information on horizontal well interpretation.</p>\n<p>Additionally, feel free to watch how the manual geosteering process works:\n<a href=\"https://youtu.be/gdK_eY5_QrE?si=0zvqh87AtgtToRE1&amp;t=146\" target=\"_blank\">https://youtu.be/gdK_eY5_QrE?si=0zvqh87AtgtToRE1&amp;t=146</a></p>\n<p>Most importantly, make sure you enjoy the competition. You are solving a real-world problem, and successful solutions will be greatly appreciated by the industry by making drilling safer, more efficient, and lower in emissions.</p>\n<p>If you have any questions, we would be happy to address them.</p>\n<p>— On behalf of all organizers,\nROGII</p>"
+    },
+    {
+      "id": 3454367,
+      "post_date": "2026-05-07 01:45:49.953000",
+      "content": "<p>Mara ko b bato</p>"
+    }
+  ],
+  "697400": [
+    {
+      "id": 3453781,
+      "post_date": "2026-05-05 22:46:46.773000",
+      "content": "<p>UPDATE\nWe were able to fix the issues with the dataset and submissions are back on. Good luck everyone!</p>\n<hr>\n<p>Hi everyone, \nwe temporarily disabled submissions because there is a rerun dataset issue that we're resolving. We'll update the forum as soon as we have an update. Thank you for your patience!</p>\n<p>María</p>"
+    },
+    {
+      "id": 3453787,
+      "post_date": "2026-05-05 22:57:36.010000",
+      "content": "<p>The issue has been resolved. Apologies everyone for the disruption! Please let us know if anything else comes up.</p>",
+      "replies": [
+        {
+          "id": 3453789,
+          "post_date": "2026-05-05 23:04:10.450000",
+          "content": "<p>Do we need to re-download any files? Or was this an issue on your side?</p>",
+          "replies": [
+            {
+              "id": 3453791,
+              "post_date": "2026-05-05 23:06:58.550000",
+              "content": "<p>This was just on the backend. No need to redownload anything.</p>"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "694973": [
+    {
+      "id": 3449312,
+      "post_date": "2026-04-27 21:33:19.370000",
+      "content": "<h3>Information for newbies</h3>\n<p><strong>New to machine learning and data science?</strong> No question is too basic or too simple. Feel free to start your own thread, or use this thread as a place to post any first-timer clarifying questions for the Kaggle community to help you with!</p>\n<p><strong>New to Kaggle?</strong> Take a look at a few videos to learn a bit more about <a href=\"https://www.youtube.com/watch?v=aIus8si_Et0\" target=\"_blank\">site etiquette</a>, <a href=\"https://www.youtube.com/watch?v=sEJHyuWKd-s\" target=\"_blank\">Kaggle lingo</a>, and <a href=\"https://www.youtube.com/watch?&amp;v=GJBOMWpLpTQ\" target=\"_blank\">how to enter a competition using Kaggle Notebooks</a>. Publish and share your <a href=\"https://www.kaggle.com/docs/models#publishing-a-model\" target=\"_blank\">models on Kaggle Models</a>!</p>\n<p><strong>Looking for a team?</strong> Express your interest in joining a team through our <a href=\"https://www.kaggle.com/discussions/product-feedback/341195\" target=\"_blank\">Team Up</a> feature.</p>\n<p><strong>Remember</strong>: Kaggle is for everyone. Whether you're teaming up or sharing tips in the competition forum, we expect everyone to follow our Kaggle community guidelines.</p>\n<h3>Competition's Official Discord</h3>\n<p>In addition to this competition forum, you can continue the discussion in our official Kaggle Discord Server here:</p>\n<h1><a href=\"http://discord.gg/kaggle\" target=\"_blank\">discord.gg/kaggle</a></h1>\n<p>The Discord is a great place to ask getting started questions, chat about the nuances of this competition, and connect with potential team mates. Learn more about Discord at our <a href=\"https://www.kaggle.com/discussions/general/429933\" target=\"_blank\">announcement here</a>. Here are a few things to keep in mind though:</p>\n<p><strong>1. Discord Competition Channels are 'Public' - Don't Share Private Information</strong></p>\n<p>Discord channels for specific competitions are considered 'public' spaces where you are allowed to talk about competition details. Please remember that private sharing of competition code or data outside of your team is, as always, not permitted. Code sharing must always be done publicly through the Kaggle forums/notebooks.</p>\n<p><strong>2. Discord Competition Channels are Not Monitored by Staff - Keep Important Information on the Kaggle Forums</strong></p>\n<p>Kaggle Staff and Hosts running competitions will not monitor Discord or be available to answer questions in Discord. This is intended to be a more casual space to discuss competitions and help each other. Please keep important questions, insights, writeups, and other valuable conversation on the Kaggle forums. </p>\n<p>Happy modeling! </p>"
+    }
+  ],
+  "697418": [
+    {
+      "id": 3453821,
+      "post_date": "2026-05-06 01:02:47.450000",
+      "content": "<p><img src=\"https://www.googleapis.com/download/storage/v1/b/kaggle-forum-message-attachments/o/inbox%2F4080021%2F3f56527c733365a94d929bdc0600c7ef%2Fig_023b4ba06ac0441e0169fa9248ca54819aacb93888a02601a8.png?generation=1778029361497538&amp;alt=media\" alt=\"\"></p>"
+    },
+    {
+      "id": 3454599,
+      "post_date": "2026-05-07 14:37:31.537000",
+      "content": "<p>This diagram makes a lot of sense to me, but I'm still confused on the magnitude of TVT in the data. Each TVT value is larger than both Z or the top depths of the individual layers at a given MD. I'm assuming all units are in feet. This diagram doesn't work if TVT &gt; Z, so I suspect ROGII is using a different convention here. I think TVT is loosely defined and used differently by different parties. A clarification about the definition here by ROGII with a diagram would certainly be appreciated.</p>"
+    },
+    {
+      "id": 3454421,
+      "post_date": "2026-05-07 05:32:15.820000",
+      "content": "<p>Informative Diagram of the Problem <a href=\"https://www.kaggle.com/zacchaeus\" target=\"_blank\">@zacchaeus</a> </p>"
+    },
+    {
+      "id": 3454017,
+      "post_date": "2026-05-06 12:48:22.463000",
+      "content": "<p>Thank you for this diagram! But what about typewells? Dow you know how does it work ? Why is TVT a straight line in typewell data? Isn't TVT the thickness of the Layers? And if we drill vertically, then we pass through several layers and the TVT should change from layer to layer right? Or is vertical only for TargetLayer? 😵‍💫</p>",
+      "replies": [
+        {
+          "id": 3454407,
+          "post_date": "2026-05-07 04:32:34.917000",
+          "content": "<p>Typewell.csv  act as ground truth of horizontal_well.csv</p>"
+        }
+      ]
+    }
+  ],
+  "697431": [
+    {
+      "id": 3455578,
+      "post_date": "2026-05-09 18:17:55.963000",
+      "content": "<p>deep net logit:  horizontal md length x location of reference (each location is a class)</p>\n<p><img src=\"https://www.googleapis.com/download/storage/v1/b/kaggle-forum-message-attachments/o/inbox%2F113660%2F3df800b866b035d8ea3668f479cd241b%2FSelection_3456.png?generation=1778350565993562&amp;alt=media\" alt=\"\"></p>\n<p>training iterations of the transformer:</p>\n<ul>\n<li>it figures out the best way is to grow from PS?  I actually expect it to find anchor points first</li>\n</ul>"
+    },
+    {
+      "id": 3454874,
+      "post_date": "2026-05-08 04:46:07.447000",
+      "content": "<p>plot in 3d and it is a folding problem</p>\n<p><img src=\"https://www.googleapis.com/download/storage/v1/b/kaggle-forum-message-attachments/o/inbox%2F113660%2Fa5cbb405fd3a89da3dd64ea731d85478%2FSelection_3390.png?generation=1778215560856015&amp;alt=media\" alt=\"\"></p>",
+      "replies": [
+        {
+          "id": 3454876,
+          "post_date": "2026-05-08 04:47:47.360000",
+          "content": "<p><img src=\"https://www.googleapis.com/download/storage/v1/b/kaggle-forum-message-attachments/o/inbox%2F113660%2Fc8c6eeef5151aab214e5273363907b35%2FSelection_3391.png?generation=1778215665544705&amp;alt=media\" alt=\"\"></p>"
+        }
+      ]
+    },
+    {
+      "id": 3453846,
+      "post_date": "2026-05-06 03:38:07.140000",
+      "content": "<p>related to geosteering. Here, given a strip of MD-GR of the horizontal well, \"stretch and fold\" it so that it matches the TVT-GR reference of the typewell</p>\n<p><img src=\"https://www.googleapis.com/download/storage/v1/b/kaggle-forum-message-attachments/o/inbox%2F113660%2Fb40517687f05f7ecea819763d3b150dc%2FSelection_3412.png?generation=1778261192499811&amp;alt=media\" alt=\"\"></p>\n<p><img src=\"https://www.googleapis.com/download/storage/v1/b/kaggle-forum-message-attachments/o/inbox%2F113660%2F6f36c16fad39781039af137e753996dd%2FSelection_3304.png?generation=1778038684983121&amp;alt=media\" alt=\"\"></p>\n<hr>\n<p>but, since the test and train locations are pretty close, pure regression might just also work</p>"
+    },
+    {
+      "id": 3453985,
+      "post_date": "2026-05-06 11:01:23.030000",
+      "content": "<p>forward model?</p>\n<pre><code>hfile = \"0a57a29c__horizontal_well.csv\"\ntfile = \"0a57a29c__typewell.csv\"\nh  = pd.read_csv(f\"{KAGGLE_DIR}/train/{hfile}\")\ntw = pd.read_csv(f\"{KAGGLE_DIR}/train/{tfile}\")\ntw_tvt = tw[\"TVT\"].values\ntw_gr = tw[\"GR\"].values\nh_tvt = h[\"TVT\"].values\nh_gr = h[\"GR\"].values\nquery_gr = np.interp(\n   h_tvt,\n   tw_tvt,\n   tw_gr,\n)\n</code></pre>\n<p><img src=\"https://www.googleapis.com/download/storage/v1/b/kaggle-forum-message-attachments/o/inbox%2F113660%2F4690deb3957ae578318354dcd4385283%2FSelection_3332.png?generation=1778085488837342&amp;alt=media\" alt=\"\"></p>"
+    },
+    {
+      "id": 3453983,
+      "post_date": "2026-05-06 10:59:03.640000",
+      "content": "<p>the trick to winning is to \"somehow\" reconstruct the \"3d geological site\" using the train AND test data, since the wells are in the same \"site\"</p>"
+    },
+    {
+      "id": 3453980,
+      "post_date": "2026-05-06 10:51:46.880000",
+      "content": "<p><img src=\"https://www.googleapis.com/download/storage/v1/b/kaggle-forum-message-attachments/o/inbox%2F113660%2F7418e3be8c2b50fe18e87e7f8beb00e4%2FSelection_3321.png?generation=1778064703636922&amp;alt=media\" alt=\"\"></p>"
+    },
+    {
+      "id": 3453849,
+      "post_date": "2026-05-06 03:51:13.910000",
+      "content": "<p><a href=\"https://github.com/luthfigeo/DTW-Stratigraphic-Correlation/blob/main/DTW.ipynb\" target=\"_blank\">https://github.com/luthfigeo/DTW-Stratigraphic-Correlation/blob/main/DTW.ipynb</a>\n<img src=\"https://www.googleapis.com/download/storage/v1/b/kaggle-forum-message-attachments/o/inbox%2F113660%2F8653a6175531f307e6d3f22c4b95b560%2FSelection_3305.png?generation=1778039471463012&amp;alt=media\" alt=\"\"></p>"
+    },
+    {
+      "id": 3455713,
+      "post_date": "2026-05-10 05:38:00.933000",
+      "content": "<p>Cool info on geosteering <a href=\"https://www.kaggle.com/hengck23\" target=\"_blank\">@hengck23</a> </p>"
+    },
+    {
+      "id": 3455328,
+      "post_date": "2026-05-09 05:43:53.623000",
+      "content": "<p>plot of md vs dTVT</p>\n<p><img src=\"https://www.googleapis.com/download/storage/v1/b/kaggle-forum-message-attachments/o/inbox%2F113660%2F463aaa87facc21c28d172fec7a016510%2FSelection_3418.png?generation=1778305370654718&amp;alt=media\" alt=\"\"></p>\n<p><img src=\"https://www.googleapis.com/download/storage/v1/b/kaggle-forum-message-attachments/o/inbox%2F113660%2Fd1dace62c505b33b21d01104722c3bf8%2FSelection_3419.png?generation=1778305406732462&amp;alt=media\" alt=\"\"></p>\n<p>this tells you how the ground truth is created … reverse engineering?</p>",
+      "replies": [
+        {
+          "id": 3455358,
+          "post_date": "2026-05-09 07:49:03.390000",
+          "content": "<p>why is dy constant? synthetic data????</p>\n<p><img src=\"https://www.googleapis.com/download/storage/v1/b/kaggle-forum-message-attachments/o/inbox%2F113660%2F1bc50ab50551bbe3621be961745da6de%2FSelection_3427.png?generation=1778312927936006&amp;alt=media\" alt=\"\"></p>\n<p><img src=\"https://www.googleapis.com/download/storage/v1/b/kaggle-forum-message-attachments/o/inbox%2F113660%2Ffc1b73c99aa3ca582d498619a119804f%2FSelection_3428.png?generation=1778312940805533&amp;alt=media\" alt=\"\"></p>"
+        }
+      ]
+    },
+    {
+      "id": 3454411,
+      "post_date": "2026-05-07 04:52:16.537000",
+      "content": "<p>piece-wise fitting DTW.</p>\n<p>model predict (start,end, dTVT/dMD slope) for each segment.</p>\n<p>but i think the original DP in cost matrix is better </p>\n<p><img src=\"https://www.googleapis.com/download/storage/v1/b/kaggle-forum-message-attachments/o/inbox%2F113660%2F23521faa598aa443f46d761cc1f5f7c0%2FSelection_3349.png?generation=1778129487699553&amp;alt=media\" alt=\"\"></p>\n<p><img src=\"https://www.googleapis.com/download/storage/v1/b/kaggle-forum-message-attachments/o/inbox%2F113660%2Fd0bdc08a78a3bb3360082ab1e9276493%2FSelection_3362.png?generation=1778140477307972&amp;alt=media\" alt=\"\"></p>\n<ul>\n<li>When the drill moves a long distance in MD / XYZ, it may still stay inside almost the same geological position.  </li>\n<li>That makes alignment hard because there is little “geological movement” to match  </li>\n</ul>",
+      "replies": [
+        {
+          "id": 3454493,
+          "post_date": "2026-05-07 10:59:17.863000",
+          "content": "<p>Do I understand you method correct? \nYou move a window along the hw_gr, after ps point. For each window, you find the closest window on tw_gr with DTW. Then you look at which TVT is closest to the window on tw_gr -&gt; this TVT  is predict ? I did that way, but it totaly not worked for me 🤔</p>",
+          "replies": [
+            {
+              "id": 3454511,
+              "post_date": "2026-05-07 11:46:55.897000",
+              "content": "<p>It is not the normal dtw. The index can be reversed depending if the drillhead is travelling upwards or downward. The noise is quite large, maybe you need to restrict to local search.</p>\n<p>The host post had a YouTube video link on rogii geosteer, that will clear things up</p>"
+            },
+            {
+              "id": 3454533,
+              "post_date": "2026-05-07 12:32:34.120000",
+              "content": "<p><a href=\"https://www.kaggle.com/evgeny000\" target=\"_blank\">@evgeny000</a> </p>\n<p><img src=\"https://www.googleapis.com/download/storage/v1/b/kaggle-forum-message-attachments/o/inbox%2F113660%2F09eb08a581fad7ca45347e14199bab63%2FSelection_3366.png?generation=1778157143610840&amp;alt=media\" alt=\"\"></p>"
+            },
+            {
+              "id": 3454554,
+              "post_date": "2026-05-07 13:01:01.020000",
+              "content": "<p>Thanks for the explanation! I still don't fully understand the data yet 😬, I hope it will be more clear after watching the video you mentioned. As far as I understand, you don't use tw data? </p>\n<p>The most confusing part to me  the tw data. The TVT in the tw data is a monotonous straight line, although as far as I understand, when different layers intersect during drilling, the thickness of the different layers changes, and the TVT should be fluctuate 🤔</p>"
+            },
+            {
+              "id": 3454560,
+              "post_date": "2026-05-07 13:09:09.677000",
+              "content": "<p>You should think of it like that: reference vertical typewell has gr that encodes the geologic location called tvt. We are in horizontal well with unknown location. We want to know what is our tvt. But we have signal gr. We need to move up or down to have generate enough gr signal signature for matching reference gr to guess the tvt.  Tvt is location relative to the geology layer we want to be.  </p>"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "697433": [
+    {
+      "id": 3453851,
+      "post_date": "2026-05-06 04:01:41.380000",
+      "content": "<p>Hi everyone! I’ve just shared my EDA notebook for this competition:\n<a href=\"https://www.kaggle.com/code/songhow/well-prediction-eda-exploratory\" target=\"_blank\">https://www.kaggle.com/code/songhow/well-prediction-eda-exploratory</a>\nIt includes target distribution, per-well profiles, feature correlations, and evaluation zone structure analysis. Feel free to check it out, and any feedback or suggestions are very welcome!😊</p>"
+    }
+  ],
+  "697406": [
+    {
+      "id": 3453788,
+      "post_date": "2026-05-05 23:00:26.957000",
+      "content": "<h2>Geological Formations</h2>\n<p>ANCC, ASTNU, ASTNL, EGFDU, EGFDL, BUDA - Predicted depth of various geological formations (Training only). And Categorical labels indicating the geological unit in Geology column (train typewells)</p>\n<h3>BUDA Limestone</h3>\n<p>\"The Buda Limestone is a dense white to yellow sparry limestone with numerous calcite veins that weathers to yellowish or pinkish due to its iron content.\"</p>\n<p>Coordinates    30.0849°N 97.8507°W - Region: North America</p>\n<p><a href=\"https://en.wikipedia.org/wiki/Buda_Limestone\" target=\"_blank\">https://en.wikipedia.org/wiki/Buda_Limestone</a></p>\n<h3>ANCC - Anacacho Limestone</h3>\n<p>\"The Anacacho Limestone is a unit of limestone of Cretaceous (Campanian) age in Texas. Most of the Anacacho Limestone is interpreted as having accumulated in relatively shallow (&lt;50 m depth) marine water.\"</p>\n<p><a href=\"https://en.wikipedia.org/wiki/Anacacho_Limestone\" target=\"_blank\">https://en.wikipedia.org/wiki/Anacacho_Limestone</a></p>\n<h3>ASTNU and ASTNL</h3>\n<p>Austin Chalk (U = <strong>Upper Austin Chalk</strong>, L = <strong>Lower Austin Chalk</strong>).</p>\n<p>\"The Austin Chalk is an upper Cretaceous geologic formation in the Gulf Coast region of the United States.\"</p>\n<p>\"The rocks of the Austin Chalk consist of recrystallized, fossiliferous, interbedded chalks and marls. Exposures of Austin Chalk are mainly seen in quarries, roadcuts, and stream beds where water eroded the soil. \"</p>\n<p><a href=\"https://en.wikipedia.org/wiki/Austin_Chalk\" target=\"_blank\">https://en.wikipedia.org/wiki/Austin_Chalk</a></p>\n<h3>EFGDU and EFGDL</h3>\n<p>Eagle Ford (U = <strong>Upper Eagle Ford</strong>, L = <strong>Lower Eagle Ford</strong>).</p>\n<p>\"The <strong>Eagle Ford Group</strong> (also called the Eagle Ford Shale) is a sedimentary rock formation deposited during the Cenomanian and Turonian ages of the Late Cretaceous over much of the modern-day state of Texas. The Eagle Ford is predominantly composed of organic matter-rich fossiliferous marine shales and marls with interbedded thin limestones.\"</p>\n<p><a href=\"https://en.wikipedia.org/wiki/Eagle_Ford_Group\" target=\"_blank\">https://en.wikipedia.org/wiki/Eagle_Ford_Group</a></p>\n<h3>Olmos</h3>\n<p>\"The Olmos Formation is a Late Cretaceous formation in the easternmost portion of the Rio Grande Embayment of the Gulf Coast Basin in Texas. It is the uppermost unit in the Campanian Taylor Group of Texas, unconformably overlain by the Escondido Formation and underlain by San Miguel Formation . Both of the Escondido and San Miguel Formations are sequences of mudstone and sandstone.\"</p>\n<p><a href=\"https://gccc.beg.utexas.edu/co2-data/olmos-00\" target=\"_blank\">https://gccc.beg.utexas.edu/co2-data/olmos-00</a></p>"
+    }
+  ],
+  "697857": [
+    {
+      "id": 3455130,
+      "post_date": "2026-05-08 16:45:14.523000",
+      "content": "<p>not given. It could be that the ground truth is \"derived from them.\" </p>"
+    },
+    {
+      "id": 3454908,
+      "post_date": "2026-05-08 06:57:39.873000",
+      "content": "<p>This feature is included in train dataset only</p>"
+    },
+    {
+      "id": 3454664,
+      "post_date": "2026-05-07 16:46:47.490000",
+      "content": "<p>I noticed that provided sample test sets doesn't have the feature <code>Geology</code>.</p>\n<p>I don't see any relevant information regarding this feature as well. Can somebody clarify?</p>"
+    }
+  ],
+  "698002": [
+    {
+      "id": 3454868,
+      "post_date": "2026-05-08 04:09:03.520000",
+      "content": "<p>With the current evaluation setup, participants can train the model offline and then fine-tune it using the test dataset at submission time by peeking at the actual test dataset. They can only extract the available TVT_input (calibration reference) and other features but can make a solid improvement through domain adaptation.</p>\n<p>Specifically, at submission time in a Kaggle notebook:</p>\n<ol>\n<li>Load the hidden test data (wellbores + GR, formation parameters, TVT_input)</li>\n<li>Fine-tune the pre-trained model using test features as input (self-supervised learning using TVT_input as calibration targets)</li>\n<li>Generate final predictions on the adapted model</li>\n</ol>\n<p>Is this approach considered allowed under the competition rules? Looking forward to feedback from organizers.</p>"
+    },
+    {
+      "id": 3455094,
+      "post_date": "2026-05-08 15:49:55.707000",
+      "content": "<p>I have tested with same training setup:</p>\n<p><a href=\"https://www.kaggle.com/code/llkh0a/rogii-lgbm-aug-online-training\" target=\"_blank\">online training</a>: 10.953</p>\n<p><a href=\"https://www.kaggle.com/code/llkh0a/rogii-lgbm-aug\" target=\"_blank\">no online training</a>: 11.323 </p>\n<p>The features processing idea was from <a href=\"https://www.kaggle.com/code/shinyanagai123/triple-signal-beam-search-dual-pf-lightgbm\" target=\"_blank\">https://www.kaggle.com/code/shinyanagai123/triple-signal-beam-search-dual-pf-lightgbm</a></p>"
+    }
+  ],
+  "697329": [
+    {
+      "id": 3454501,
+      "post_date": "2026-05-07 11:26:32.837000",
+      "content": "<p>Hi\nI dont see any errors when submitting the file however i have problems during the scoring process. The scoring process is still running and it has been a bit over 4 hours, that the scoring has not been completed. \nThe kaggle notebook was completed in 6 hours.</p>",
+      "replies": [
+        {
+          "id": 3454547,
+          "post_date": "2026-05-07 12:46:50.050000",
+          "content": "<p>Facing similar issue here</p>"
+        }
+      ]
+    },
+    {
+      "id": 3453668,
+      "post_date": "2026-05-05 19:23:46.343000",
+      "content": "<p>Hi, I've been trying to submit but keep getting a \"Submission Scoring Error\". My submission file matches the <code>sample_submission.csv</code> exactly 14,151 rows, correct <code>id</code> and <code>tvt</code> columns, no <code>NaN</code> values, all IDs verified against the sample.</p>\n<p>Since this competition just launched and the leaderboard is empty, I'm wondering if the scorer isn't active yet on Kaggle's side. Can the organizers confirm whether submissions are open and the evaluation script is live?</p>\n<p>Thanks</p>"
+    },
+    {
+      "id": 3453771,
+      "post_date": "2026-05-05 22:12:50.100000",
+      "content": "<p>Apologies for the scoring problems. The issue should be resolved now. Please let us know if you continue to have trouble or if anything else comes up.</p>",
+      "replies": [
+        {
+          "id": 3453776,
+          "post_date": "2026-05-05 22:27:27.450000",
+          "content": "<p>Thank you! Working on it :) </p>"
+        },
+        {
+          "id": 3454689,
+          "post_date": "2026-05-07 17:45:18.867000",
+          "content": ""
+        }
+      ]
+    },
+    {
+      "id": 3453744,
+      "post_date": "2026-05-05 21:31:32.903000",
+      "content": "<p>Same situation here. Can you please check? Thank you!</p>"
+    },
+    {
+      "id": 3453707,
+      "post_date": "2026-05-05 20:22:32.520000",
+      "content": "<p>Investigating . . .</p>"
+    },
+    {
+      "id": 3453689,
+      "post_date": "2026-05-05 20:00:14.760000",
+      "content": "<p>I also failed to submit it.</p>"
+    },
+    {
+      "id": 3453688,
+      "post_date": "2026-05-05 19:56:00.617000",
+      "content": "<p>I agree something seems wrong. I have tried multiple times to get my XGB starter to submit but i keep getting scoring errors. </p>\n<p>Has anyone tried to just submit the sample submission? If that fails, there is certainly a problem.</p>\n<pre><code>pd.read_csv(\"sample_submission.csv\").to_csv(\"submission.csv\",index=False)\n</code></pre>\n<p>UPDATE: Fixed</p>",
+      "replies": [
+        {
+          "id": 3453693,
+          "post_date": "2026-05-05 20:06:45.197000",
+          "content": "<p>I tried submitting the sample submission, it failed <a href=\"https://www.kaggle.com/code/cdeotte/submit-sample-submission\" target=\"_blank\">here</a></p>\n<p>Admins, can you fix the LB? Thanks <a href=\"https://www.kaggle.com/addisonhoward\" target=\"_blank\">@addisonhoward</a> <a href=\"https://www.kaggle.com/inversion\" target=\"_blank\">@inversion</a> <a href=\"https://www.kaggle.com/sohiermse\" target=\"_blank\">@sohiermse</a></p>\n<p>UPDATE: Fixed</p>",
+          "replies": [
+            {
+              "id": 3453695,
+              "post_date": "2026-05-05 20:08:58.640000",
+              "content": "<p>Thanks for the validation Chris</p>"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 3453757,
+      "post_date": "2026-05-05 21:52:35.293000",
+      "content": "<p>Yes, I also failed to submit</p>"
+    },
+    {
+      "id": 3455013,
+      "post_date": "2026-05-08 12:11:08.410000",
+      "content": "<p>Hello again,</p>\n<p>I wanted to provide a more detailed update because I am STILL consistently getting “Submission Scoring Error” despite extensive debugging and validation.</p>\n<p>At this point I do not believe the issue is caused by my actual model predictions.</p>\n<p>I reviewed this entire thread carefully and noticed several important things:</p>\n<p>• Multiple users reported the exact same issue<br>\n• Chris Deotte confirmed even the untouched sample submission failed initially<br>\n• Kaggle staff acknowledged scorer problems existed<br>\n• Other users are still reporting scoring-related issues and stuck submissions</p>\n<p>Because of this, I performed a very extensive set of validation tests on my side.</p>\n<p>Here is everything I have verified:</p>\n<p>SUBMISSION STRUCTURE CHECKS\n• Exactly 14,151 rows\n• Exactly 2 columns\n• Columns are:</p>\n<ul>\n<li>id</li>\n<li>tvt\n• Column order matches sample_submission.csv exactly\n• ID order matches sample_submission.csv exactly\n• No duplicate IDs\n• No missing IDs\n• No NaN values\n• tvt column is numeric float64\n• submission.csv successfully written to:\n/kaggle/working/submission.csv</li>\n</ul>\n<p>I also wrote validation scripts to compare my submission directly against sample_submission.csv including:\n• shape checks\n• dtype checks\n• missing value checks\n• duplicate checks\n• ID set checks\n• ID order checks\n• numeric validity checks\n• infinity/NaN checks</p>\n<p>Everything passes.</p>\n<p>Originally I suspected my actual model output (Phase 6 Delta Method) might be causing the issue because it produced only a few unique prediction values.</p>\n<p>However, after further debugging I discovered that EVEN COMPLETELY TRIVIAL submissions still fail.</p>\n<p>I tested all of the following:</p>\n<ol>\n<li>Original Phase 6 model submission</li>\n<li>Simplified/cleaned Phase 6 submission</li>\n<li>Submission with constant numeric values only</li>\n<li>Submission generated directly from sample_submission.csv</li>\n<li>Completely brand-new minimal notebook with only a few lines of code</li>\n</ol>\n<p>Example of the minimal notebook I tested:</p>\n<p>import pandas as pd</p>\n<p>sample = pd.read_csv(\n    \"/kaggle/input/competitions/rogii-wellbore-geology-prediction/sample_submission.csv\"\n)</p>\n<p>sub = sample.copy()\nsub[\"tvt\"] = 11750.0</p>\n<p>sub.to_csv(\"/kaggle/working/submission.csv\", index=False)</p>\n<p>print(sub.shape)\nprint(sub.isnull().sum())</p>\n<p>This STILL results in:\n“Submission Scoring Error”</p>\n<p>I also confirmed:\n• notebook execution completes\n• submission.csv exists\n• file is readable\n• row count is correct\n• IDs match perfectly\n• no nulls exist</p>\n<p>At this stage, it seems unlikely that my actual model predictions are the root cause.</p>\n<p>Could Kaggle staff or the competition hosts please confirm:</p>\n<ol>\n<li>Is the scorer definitely fully operational right now?</li>\n<li>Have any recent submissions successfully scored?</li>\n<li>Are there any hidden validation rules beyond the documented CSV format?</li>\n<li>Is there any known intermittent issue with the leaderboard/scoring backend?</li>\n</ol>\n<p>I’ve now used 11+ submission attempts debugging this and wanted to provide as much technical detail as possible.</p>\n<p>Thanks very much for any clarification.</p>"
+    },
+    {
+      "id": 3454925,
+      "post_date": "2026-05-08 07:52:49.770000",
+      "content": "<p>Thanks for the information on Submission Scoring Error <a href=\"https://www.kaggle.com/abdessamedzetroni\" target=\"_blank\">@abdessamedzetroni</a> </p>"
+    },
+    {
+      "id": 3454546,
+      "post_date": "2026-05-07 12:45:59.430000",
+      "content": "<p>Same issue here. Code was able to generate the submission.csv but I could not get a score because it failed. Kindly help out</p>"
+    },
+    {
+      "id": 3454499,
+      "post_date": "2026-05-07 11:22:39.343000",
+      "content": "<p>Hi everyone,</p>\n<p>I’m still experiencing persistent “Submission Scoring Error” issues in this competition after making 11 submissions up to this stage and wanted to provide a detailed summary of everything I have tested so far.</p>\n<p>At this point, I no longer think the issue is caused by my actual model predictions, because even extremely simplified submissions are failing.</p>\n<p>Here is everything I have checked:</p>\n<p>• Verified the exact expected submission format using sample_submission.csv\n• Confirmed my submission has exactly 14,151 rows and 2 columns\n• Confirmed columns are exactly:</p>\n<ul>\n<li>id</li>\n<li>tvt</li>\n</ul>\n<p>• Confirmed column order matches sample_submission.csv exactly\n• Confirmed ID order matches sample_submission.csv exactly\n• Confirmed all IDs are present with no duplicates\n• Confirmed there are no missing values or NaNs\n• Confirmed tvt is numeric float64\n• Confirmed submission.csv is written to:\n/kaggle/working/submission.csv</p>\n<p>I also built validation code to compare my submission against sample_submission.csv directly, including:</p>\n<ul>\n<li>shape checks</li>\n<li>dtype checks</li>\n<li>duplicate checks</li>\n<li>missing value checks</li>\n<li>ID set/order checks</li>\n<li>numeric validity checks</li>\n</ul>\n<p>Everything passes.</p>\n<p>I originally suspected my Phase 6 Delta Method model predictions might be the issue because the predictions only had a few unique values. However, after further testing, I discovered the same scoring error occurs even when I completely bypass the model.</p>\n<p>I tested all of the following:</p>\n<ol>\n<li>Original Phase 6 submission</li>\n<li>Cleaned Phase 6 submission with simplified float formatting</li>\n<li>Submission using constant values only</li>\n<li>Submission created directly from sample_submission.csv</li>\n<li>Brand new minimal notebook with only a few lines of code</li>\n</ol>\n<p>For example, I tested this extremely minimal notebook:</p>\n<p>import pandas as pd</p>\n<p>sample = pd.read_csv(\n\"/kaggle/input/competitions/rogii-wellbore-geology-prediction/sample_submission.csv\"\n)</p>\n<p>sub = sample.copy()\nsub[\"tvt\"] = 11750.0</p>\n<p>sub.to_csv(\"/kaggle/working/submission.csv\", index=False)</p>\n<p>This still produces:\n“Submission Scoring Error”</p>\n<p>I also confirmed:</p>\n<ul>\n<li>the notebook completes successfully</li>\n<li>submission.csv exists</li>\n<li>the file is readable</li>\n<li>row counts are correct</li>\n<li>there are no nulls</li>\n</ul>\n<p>Additionally, I noticed older discussion threads where multiple users reported the same issue, including failures when submitting the untouched sample_submission.csv itself.</p>\n<p>Because of this, I’m wondering if:</p>\n<ul>\n<li>the scorer may still have intermittent issues,</li>\n<li>hidden validation rules may exist beyond the documented format,</li>\n<li>or there is some backend evaluation problem still occurring.</li>\n</ul>\n<p>Can Kaggle staff or competition hosts confirm:</p>\n<ol>\n<li>that the scorer is fully operational now,</li>\n<li>whether additional hidden constraints exist for tvt values,</li>\n<li>and whether anyone has successfully submitted a minimal constant-value submission recently?</li>\n</ol>\n<p>Thanks — I wanted to provide as much debugging detail as possible before continuing to rewrite my pipeline.</p>",
+      "replies": [
+        {
+          "id": 3455004,
+          "post_date": "2026-05-08 11:47:38.907000",
+          "content": "<p>Hi <a href=\"https://www.kaggle.com/por160893\" target=\"_blank\">@por160893</a>,</p>\n<p>The scoring issue should be fully resolved now; it was only present for a few hours after launch. Have you tried your minimal submission that just submits the <code>sample_submission.csv</code> lately? I imagine it should work. Another option is to copy one of the community notebooks (like <a href=\"https://www.kaggle.com/code/cdeotte/xgb-starter-cv-15\" target=\"_blank\">this one</a>, say) and try submitting it.</p>",
+          "replies": [
+            {
+              "id": 3455036,
+              "post_date": "2026-05-08 13:07:47.580000",
+              "content": "<p>Hi <a href=\"https://www.kaggle.com/RyanHolbrook\" target=\"_blank\">@RyanHolbrook</a> and organizers,</p>\n<p>I am still encountering a submission scoring error even after rebuilding the notebook from scratch and validating the submission file extensively.</p>\n<p>What I tested:</p>\n<ul>\n<li>I deleted all previous notebook cells and created a completely clean notebook.</li>\n<li>I successfully submitted the sample submission earlier using the same notebook workflow.</li>\n<li>I generated my actual predictions in RStudio locally and uploaded the CSV to Kaggle as a dataset.</li>\n<li>In the Kaggle Python notebook, I simply load the uploaded CSV and write it directly to /kaggle/working/submission.csv.</li>\n</ul>\n<p>Validation checks completed successfully:</p>\n<ul>\n<li>Shape matches sample exactly: (14151, 2)</li>\n<li>Columns exactly match: id, tvt</li>\n<li>No missing values</li>\n<li>No duplicate IDs</li>\n<li>ID order matches sample submission</li>\n<li>id dtype = object</li>\n<li>tvt dtype = float64</li>\n<li>Output file exists successfully before submission</li>\n</ul>\n<p>Notebook output confirms:</p>\n<ul>\n<li>submission.csv is written correctly</li>\n<li>Kaggle notebook execution completes normally</li>\n<li>No runtime errors occur</li>\n</ul>\n<p>Example predictions:\ntext 000d7d20_1442    11749.007289 000d7d20_1443    11749.007289 000d7d20_1444    11749.007289 </p>\n<p>One thing I noticed:</p>\n<ul>\n<li>My Phase 6B model currently produces only 4 unique prediction values across all 14,151 rows.</li>\n<li>However, the values are numeric and valid floats.</li>\n</ul>\n<p>The confusing part is:</p>\n<ul>\n<li>the sample submission workflow succeeds,</li>\n<li>but this actual prediction file still produces a scoring error.</li>\n</ul>\n<p>Could the scorer be rejecting submissions with low prediction variance or certain value ranges?</p>\n<p>Any guidance would be greatly appreciated, because structurally the submission appears fully valid now.</p>"
+            },
+            {
+              "id": 3455071,
+              "post_date": "2026-05-08 14:47:10.790000",
+              "content": "<p>Hi <a href=\"https://www.kaggle.com/por160893\" target=\"_blank\">@por160893</a>,</p>\n<blockquote>\n  <p>I generated my actual predictions in RStudio locally and uploaded the CSV to Kaggle as a dataset.</p>\n</blockquote>\n<p>In this competition, you need to submit a notebook that creates your submission file. The test set you see on the Data page isn't the actual test set; those are just some examples drawn from the training set. When your submitted notebook is scored, this example data is replaced with the actual hidden test set. Your submissions are failing because you're making predictions on the wrong test data; the prediction ids don't match and there aren't enough of them.</p>"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 3454420,
+      "post_date": "2026-05-07 05:18:24.297000",
+      "content": "<p>Hi everyone,</p>\n<p>I’m trying to understand the submission behavior for this code competition.</p>\n<p>Yesterday I had 5 failed submission attempts. Today I launched a new submission and noticed what looks like two separate processes:</p>\n<ol>\n<li>one process running my notebook computation;</li>\n<li>another one already showing the competition submission as “Scoring…”</li>\n</ol>\n<p>The confusing part is that the notebook is still running and has not produced <code>submission.csv</code> yet, but it already looks like one submission attempt has been used.</p>\n<p>Could someone clarify whether this is expected behavior? Does Kaggle start the scoring/submission process in parallel with the notebook rerun, and does this still count as only one submission attempt?</p>\n<p><a href=\"https://www.kaggle.com/ryanholbrook\" target=\"_blank\">@ryanholbrook</a> Sorry to bother you directly, but I wanted to check whether I may have done something wrong on my side or if this is normal for code competitions.</p>\n<p>Thank you!</p>",
+      "replies": [
+        {
+          "id": 3455007,
+          "post_date": "2026-05-08 11:50:38.467000",
+          "content": "<p>There are two runs kicked off when you submit from the notebook editor. One of them is a run on the published data that you see on the Data page. The other is the rerun on the hidden test data; that's the run showing as \"Scoring…\". These two sessions run in parallel, but only the run on the hidden test set counts against your submission attempts.</p>\n<p>It's also possible to do these separately. You would just commit the notebook normally, and after it's finished, go to the notebook viewer and submit from there. That would kick off the rerun on the hidden test set only.</p>"
+        }
+      ]
+    },
+    {
+      "id": 3454362,
+      "post_date": "2026-05-07 01:16:40.407000",
+      "content": "<p>I couldn’t even submit because of an error lol</p>\n<p><img src=\"https://www.googleapis.com/download/storage/v1/b/kaggle-forum-message-attachments/o/inbox%2F9304974%2F5fb6fae17f104dafb3333942e1f6b133%2Ferror.png?generation=1778116536533794&amp;alt=media\" alt=\"\"></p>",
+      "replies": [
+        {
+          "id": 3454670,
+          "post_date": "2026-05-07 16:56:54.843000",
+          "content": "<p>I’ve been stuck with this error all day and can’t get anything done… even in other competitions.</p>",
+          "replies": [
+            {
+              "id": 3454675,
+              "post_date": "2026-05-07 17:10:20.680000",
+              "content": "<p>Where are you seeing this error and what were you doing at the time?</p>"
+            },
+            {
+              "id": 3454690,
+              "post_date": "2026-05-07 17:52:03.403000",
+              "content": "<p>I always get this error whenever I try to create or operate a notebook. It’s been happening constantly since yesterday.</p>"
+            },
+            {
+              "id": 3455139,
+              "post_date": "2026-05-08 17:04:45.627000",
+              "content": "<p>I'm almost wondering if this is an authentication issue or something to do with a stale cache. Maybe try logging out and logging in again, or try logging in under an incognito session and see if that helps.</p>"
+            },
+            {
+              "id": 3455558,
+              "post_date": "2026-05-09 17:07:39.793000",
+              "content": "<p>Re-logging in didn’t help, but using an incognito session fixed it. Thank you very much!</p>"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 3454355,
+      "post_date": "2026-05-07 00:45:07.830000",
+      "content": "<p>Can we upload just a .csv file?  Or is command line only required?</p>"
+    }
+  ],
+  "698562": [
+    {
+      "id": 3455876,
+      "post_date": "2026-05-10 14:42:17.600000",
+      "content": "<p>should i release my notebook so u guys can suggest suggestion or anyone wanna team up to bring new ideas comment.</p>"
+    }
+  ],
+  "697552": [
+    {
+      "id": 3455150,
+      "post_date": "2026-05-08 18:19:47.837000",
+      "content": "<p>It depends on how long your notebook takes to run. For example, I ran a notebook for 2 hours and 30 minutes; it was submitted 7 hours ago and is still running. However, when I ran a notebook that only took 30 minutes, I got my results within 2 hours. It really depends on the runtime. I would recommend keeping it under 3 hours to avoid a timeout.</p>"
+    },
+    {
+      "id": 3454093,
+      "post_date": "2026-05-06 15:05:13.097000",
+      "content": "<p>Have submittted the notebook and the submission.csv file 5hr ago still i m not able to see any public score or any status \nhow much time usally does it takes to submit?</p>"
+    },
+    {
+      "id": 3454476,
+      "post_date": "2026-05-07 09:54:33.877000",
+      "content": "<p>My initial submission timed out. After I optimized it, the submissions take 4-5 hours.</p>",
+      "replies": [
+        {
+          "id": 3454791,
+          "post_date": "2026-05-07 22:34:25.540000",
+          "content": "<p>It was same for me but now it has been solved the submisssion are now happening fast!!</p>"
+        }
+      ]
+    },
+    {
+      "id": 3454447,
+      "post_date": "2026-05-07 06:58:52.430000",
+      "content": "<p>Same, one of my submisisons timed out after 11h or something</p>",
+      "replies": [
+        {
+          "id": 3454792,
+          "post_date": "2026-05-07 22:35:22.787000",
+          "content": "<p>Faced this but now it is solved ! As my second submission was done within few minutes </p>"
+        }
+      ]
+    }
+  ],
+  "698185": [
+    {
+      "id": 3455483,
+      "post_date": "2026-05-09 14:39:54.433000",
+      "content": "<p>This is a code competition. Thus you must submit the notebook itself and not the csv.\nThis notebook is then re-run automatically with many more and different files in the test folder -&gt; this ensures the test set stays hidden.</p>"
+    },
+    {
+      "id": 3455262,
+      "post_date": "2026-05-09 00:01:40.583000",
+      "content": "<p>The words \"downloaded csv file\" - you must generate the csv file in a kaggle notebook.   Where did you create the file?</p>",
+      "replies": [
+        {
+          "id": 3455457,
+          "post_date": "2026-05-09 12:52:01.540000",
+          "content": "<p>from my kaggle notebook…tried saving it many times  /saving the version but kept failing so i decided to download from the kaggle output files with intentions of uploading it manually only to realize the upload button is inactive</p>",
+          "replies": [
+            {
+              "id": 3455516,
+              "post_date": "2026-05-09 15:28:46.763000",
+              "content": "<p>You cannot upload it manually for this type of competition.<br>\nWhen you run your kaggle notebook does the submission.csv file that was created look similar to what has been shared on all the code notebooks?   </p>\n<p>After I run my notebook I go to the output and select the submission.csv file (I create some extra files so kaggle would not be certain which is my submission).   Once I have selected the file and it looks ok - than I hit the Submit to Completion button.</p>"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 3455174,
+      "post_date": "2026-05-08 19:37:33.793000",
+      "content": "<p>I have downloaded my CSV file and am ready to submit it, but I’ve noticed that the upload button on the prediction submission page is not active. What should I do in this case? Also, whenever I try the quick option of “Save &amp; Commit,” the submission keeps failing.</p>"
+    }
+  ],
+  "697507": [
+    {
+      "id": 3454052,
+      "post_date": "2026-05-06 14:00:02.230000",
+      "content": "<p>Hi <a href=\"https://www.kaggle.com/maherelouahabi\" target=\"_blank\">@maherelouahabi</a>,</p>\n<p>The wells you see in <code>test/</code> are are just example data to help you author your submissions. When you submit your notebook, the example test data will be replaced with the actual test data, which does not contain wells in the training set.</p>"
+    },
+    {
+      "id": 3454019,
+      "post_date": "2026-05-06 12:49:35.680000",
+      "content": "<p>Hi <a href=\"https://www.kaggle.com/igorkuvaev\" target=\"_blank\">@igorkuvaev</a> <a href=\"https://www.kaggle.com/sergeyalyaev\" target=\"_blank\">@sergeyalyaev</a>,</p>\n<p>While exploring the data I noticed that the well_id <code>000d7d20</code> appears\nboth in <code>train/</code> and in <code>test/</code>. The horizontal trajectory (MD, X, Y, Z)\nmatches row-for-row across the two folders for all 5,278 rows; the GR\nlog differs in ~43% of rows (likely intentional noise).</p>\n<p>Two questions:</p>\n<ol>\n<li>Is the visible test/000d7d20 a duplicate of train/000d7d20 by design\n(e.g., a sanity sample for kernel debugging), or is it an accidental\ncarry-over that will be re-mounted as a new well at hidden-test\nscoring time?</li>\n<li>The other two visible test wells (00bbac68, 00e12e8b) do not appear\nin train/. Is the hidden test set composed of mostly new wells, or\nis some overlap with train expected (consistent with synchronous\nreruns + held-out split)?</li>\n</ol>\n<p>Asking because this directly affects whether the right strategy is to\ncondition predictions on <code>train/&lt;well_id&gt;</code> existence, or to ignore that\npath entirely. Want to make sure we're modeling the right problem.</p>\n<p>Thanks!</p>"
+    },
+    {
+      "id": 3454020,
+      "post_date": "2026-05-06 12:51:29.767000",
+      "content": "<p>3 wells :</p>\n<p>000d7d20: 3836 hidden rows</p>\n<p>00bbac68: 6014 hidden rows</p>\n<p>00e12e8b: 4301 hidden rows</p>"
+    }
+  ],
+  "698266": [
+    {
+      "id": 3455366,
+      "post_date": "2026-05-09 08:21:52.967000",
+      "content": "<p>Hi. Read discussion <a href=\"https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction/discussion/697507\" target=\"_blank\">here</a>. What we see isn't the real sample submission nor real test data. When we submit our code, the sample submission and test data gets replaced and our code sees the real ones.</p>"
+    },
+    {
+      "id": 3455306,
+      "post_date": "2026-05-09 03:42:44.613000",
+      "content": "<p>Good night, organizers,\nWhile inspecting the competition data, I noticed that some well IDs appearing in sample_submission also appear in the provided train files, and the corresponding train files appear to contain TVT values for rows that are targets in the submission.\nAre participants allowed to use TVT values from provided train files directly when the same well/row IDs appear in the submission set, or should those overlapping target values be treated as unavailable/leakage?\nI want to make sure my approach follows the intended rules and spirit of the competition.\nThanks.</p>"
+    }
+  ],
+  "698449": [
+    {
+      "id": 3455674,
+      "post_date": "2026-05-10 03:57:30.960000",
+      "content": "<p>Good catch!</p>\n<p>Typically typewell selection is a manual process, the geologist picks the one that is close to the lateral and available at the time.\nWells in the project were drilled over 10 years and when you were drilling certain lateral the closest typewell (the one the is close now) could not be available.</p>\n<p>Additionally the geologist may take TVT GR data from the nearby interpreted lateral to interpret the next lateral. Sometimes this helps a lot and this approach is called \"pseudo-typewell\". Some of the typewells in the project are actually \"pseudo-typewells\" - interpretations from nearby laterals drilled prior to the current one.</p>"
+    },
+    {
+      "id": 3455643,
+      "post_date": "2026-05-09 23:30:08.617000",
+      "content": "<p>When doing a quick EDA, I noticed there are a few type well files that are exactly the same but assigned to different horizontal wells. In some cases this makes sense (wells that are oriented adjacent or on top of each other), but in other cases the wells are quite distant from each other. Why would wells some distance apart be using exactly the same type well? Is this intentional?</p>\n<p>Here are the well pairs with matching type wells, and a picture of how they are oriented compared to other wells with different type wells.</p>\n<p>duplicate_groups = [\n    ['02e7fe5a', '10b89021', '3417285d', '6ae68655', '7993a768', 'bc4381e2', 'ecdab904', 'f021b650', 'f49fdea3', 'f88ddb26'],\n    ['071d7b45', '4463446c'],\n    ['25939962', '8050c789'],\n    ['2f8e53c3', '91db7070'],\n    ['75cd5f11', 'be83e781'],\n    ['7b38844c', 'ed6e6e54'],\n    ['89f1085d', 'aed44918'],\n    ['8b95d6d1', 'a2e8e7f6'],\n    ['a4f989c2', 'd011f41b'],\n    ['add9c322', 'cbe62450'],\n    ['b977be4a', 'c908edd0'],\n    ['cd7f1687', 'fcfcc902'],\n    ['f321a31c', 'fa667be2'],\n]</p>"
+    },
+    {
+      "id": 3455892,
+      "post_date": "2026-05-10 15:45:31.637000",
+      "content": "<p>Very clutch</p>"
+    },
+    {
+      "id": 3455652,
+      "post_date": "2026-05-10 00:35:24.093000",
+      "content": "<p>Nice catch!</p>"
+    }
+  ],
+  "698282": [
+    {
+      "id": 3455416,
+      "post_date": "2026-05-09 11:14:22.527000",
+      "content": "<p>Please correct me if I am wrong here.\nBased on my EDA and other discussions it seems that TVT in this case is the vertical distance to a virtual/imaginery reference line. This aligns somewhat with the usual notion of it being the vertical thickness measured from the upper part of a geological layer. The position of thie virtual 0 TVT layer is not known to us and varies per well and location but it follows the general geological structure. This is furthermore supported by the fact that ANCC - Z = TVT + , where some offset is a constant per well -&gt; meaning that the TVT reference perfectly follows the geological structure and that the thickness of the uppermost layer (between TVT=0 and ANCC) is a fixed constant per well.\nMy believe is, that TVT=0 is referencing the ground level which is tilted in the same way as the geological structure.</p>\n<p>These are all just suspicions and I am no domain expert nor did I do extensive EDA -&gt; please correct me if I am wrong and discuss your thoughts.</p>",
+      "replies": [
+        {
+          "id": 3455675,
+          "post_date": "2026-05-10 04:02:10.810000",
+          "content": "<p>PatrickAIForFun\nyou are correct - TVT is vertical distance to a virtual/imaginery reference line\nTVT=0 is referencing the ground level - this may not be the case. \nMost importantly TVT in the lateral corresponds to certain TVT in the typewell (for given lateral-typewell pair).\nLateral XYZ are correct - so laterals have a true spatial representation, while typewell is a vertical definition of the geology (GR values)</p>",
+          "replies": [
+            {
+              "id": 3455888,
+              "post_date": "2026-05-10 15:34:29.527000",
+              "content": "<p>Is it possible to give us a small sketch of TVT , Z  in a horizontal drill\nThanks</p>"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 3455339,
+      "post_date": "2026-05-09 06:29:46.067000",
+      "content": "<p>Hope y'all enjoying this competition!</p>\n<p>I was wondering what you all defined this 'tvt', the target.\nIt seams like it means just literal 'depth' as described in typewell.\nbut I don't really think it is true meaning of tvt.. I searched up on internet, and I found out it means thickness of 'something'., but I'm not really sure what 'something' is in this competition.</p>\n<p>Pretty sure, it would mean something more than 'depth', cause.. what would be the meaning of finding tvt where we have z right? \nI'm still working on this issue.\nHope some of you can share ideas about it. Thank you!</p>"
+    },
+    {
+      "id": 3455519,
+      "post_date": "2026-05-09 15:32:47.693000",
+      "content": "<p>Using one of the AI's to help with coding I realized that it was confused about the meaning of tvt also :)</p>\n<p>A general meaning could be that it was the thickness of the geological layer.  That's the assumption that the AI was using to write some code for me that was not working.</p>\n<p>For us, not's not the correct definition, but rather its the distance from current drill bit point up.</p>"
+    }
+  ],
+  "697500": [
+    {
+      "id": 3454364,
+      "post_date": "2026-05-07 01:31:29.283000",
+      "content": "<p>I am running all training local - I have lots of compute so it makes sense for me.  It does require that I save trained models in kaggle datasets for the prediction code.</p>\n<p>The prediction and generation of the submission must be made on kaggle.</p>",
+      "replies": [
+        {
+          "id": 3454480,
+          "post_date": "2026-05-07 10:07:05.687000",
+          "content": "<p>Thank you Jimmmy for that clarification. </p>"
+        }
+      ]
+    },
+    {
+      "id": 3454000,
+      "post_date": "2026-05-06 12:14:27.747000",
+      "content": "<p>Hi everyone, \nPlease should I run my code locally on my PC or use the Kaggle Notebook for this competition. And do we have to submit the Notebook here if I run my code locally. Thank you</p>"
+    }
+  ],
+  "697506": [
+    {
+      "id": 3454051,
+      "post_date": "2026-05-06 13:57:23.740000",
+      "content": "<p><a href=\"https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction/code\" target=\"_blank\">https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction/code</a> check public notebooks.</p>"
+    },
+    {
+      "id": 3454015,
+      "post_date": "2026-05-06 12:44:22.770000",
+      "content": "<p>Hi, I’m new to this competition and still learning machine learning.</p>\n<p>I would like to ask:</p>\n<ol>\n<li>Which features are most important in the dataset?</li>\n<li>Is there a baseline model we can follow?</li>\n<li>Any recommended starting approach for beginners?</li>\n</ol>\n<p>Thank you!</p>"
+    }
+  ],
+  "697300": [
+    {
+      "id": 3453996,
+      "post_date": "2026-05-06 12:01:51.690000",
+      "content": "<p>interpolate nearby wells? you have to imagine you are subsampling from a big 3d geological structure. augmentation here means creating more samples (possibly virtual ones) from this big structure</p>"
+    },
+    {
+      "id": 3453622,
+      "post_date": "2026-05-05 18:18:55.057000",
+      "content": "<p>Hello everyone, may I ask how to perform data augmentation in this kind of competition? Or rather, is data augmentation reasonable (because I'm not sure if it will work)? This is my first time participating in this kind of competition, so I don't know much about it. Thank you to all the experts for your guidance.</p>"
+    },
+    {
+      "id": 3453673,
+      "post_date": "2026-05-05 19:25:21.987000",
+      "content": "<p>Data augmentation has limited use here because of the nature of the problem.</p>\n<p>What could work: adding small noise to GR logs, or randomly shortening the known zone during training to simulate different eval lengths.</p>\n<p>What probably won't help: flipping/rotating trajectories (wellbores have a physical direction) or standard image augmentation (this is sequential tabular data, not images).</p>\n<p>The bigger insight for this competition is that TVT barely changes in horizontal wells since the drill is moving laterally through the same formation. Feature engineering around the trajectory and typewell reference will likely matter more than augmentation.</p>\n<p>Good luck!</p>",
+      "replies": [
+        {
+          "id": 3453998,
+          "post_date": "2026-05-06 12:06:47.123000",
+          "content": "<p>warp the GR data for both reference and input  … like linear elastic transform.</p>\n<p>make aligned pairs reference and input to decide what kinds of noise, deformation to add</p>"
+        }
+      ]
+    }
+  ]
+}

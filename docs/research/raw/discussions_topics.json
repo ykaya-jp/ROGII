@@ -1,0 +1,142 @@
+[
+  {
+    "id": 697416,
+    "title": "Welcome to ROGII - Wellbore Geology Prediction!",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/697416",
+    "post_date": "2026-05-06 00:04:21.663000",
+    "_seen_in": "hot,new,top,active"
+  },
+  {
+    "id": 697400,
+    "title": "[EDIT] Dataset issue - Fixed!",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/697400",
+    "post_date": "2026-05-05 22:46:46.774000",
+    "_seen_in": "hot,new,top,active"
+  },
+  {
+    "id": 694973,
+    "title": "How to get started + Competition's Official Discord",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/694973",
+    "post_date": "2026-04-27 21:33:19.370000",
+    "_seen_in": "hot,new,top,active"
+  },
+  {
+    "id": 697431,
+    "title": "besides regression, also dwt (time warping)! ",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/697431",
+    "post_date": "2026-05-06 03:38:07.141000",
+    "_seen_in": "hot,new,top,active"
+  },
+  {
+    "id": 697418,
+    "title": "Diagram of the problem",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/697418",
+    "post_date": "2026-05-06 01:02:47.450000",
+    "_seen_in": "hot,new,top,active"
+  },
+  {
+    "id": 698449,
+    "title": "Duplicate type wells for different horizontal wells",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/698449",
+    "post_date": "2026-05-09 23:30:08.615000",
+    "_seen_in": "hot,new,top,active"
+  },
+  {
+    "id": 698282,
+    "title": "Defintion of tvt",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/698282",
+    "post_date": "2026-05-09 06:29:46.065000",
+    "_seen_in": "hot,new,top,active"
+  },
+  {
+    "id": 698002,
+    "title": "Is online learning / test-time fine-tuning allowed?",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/698002",
+    "post_date": "2026-05-08 04:09:03.521000",
+    "_seen_in": "hot,new,top,active"
+  },
+  {
+    "id": 697329,
+    "title": "Submission Scoring Error — Is the scorer live yet?",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/697329",
+    "post_date": "2026-05-05 19:23:46.344000",
+    "_seen_in": "hot,new,top,active"
+  },
+  {
+    "id": 697406,
+    "title": "Geological Formations on well Geology (region: Texas)",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/697406",
+    "post_date": "2026-05-05 23:00:26.955000",
+    "_seen_in": "hot,new,top,active"
+  },
+  {
+    "id": 698266,
+    "title": "Clarification on duplicate well IDs between train and sample_submission",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/698266",
+    "post_date": "2026-05-09 03:42:44.614000",
+    "_seen_in": "hot,new,top,active"
+  },
+  {
+    "id": 698562,
+    "title": "got stuck at 9.944 score on lb how to improve further ??",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/698562",
+    "post_date": "2026-05-10 14:42:17.598000",
+    "_seen_in": "hot,new,top,active"
+  },
+  {
+    "id": 697552,
+    "title": "Submission time confimation",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/697552",
+    "post_date": "2026-05-06 15:05:13.095000",
+    "_seen_in": "hot,new,top,active"
+  },
+  {
+    "id": 698185,
+    "title": "Unable to submit my submission file",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/698185",
+    "post_date": "2026-05-08 19:37:33.793000",
+    "_seen_in": "hot,new,top,active"
+  },
+  {
+    "id": 697857,
+    "title": "Is 'Geology' feature included in actual test set?",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/697857",
+    "post_date": "2026-05-07 16:46:47.488000",
+    "_seen_in": "hot,new,top,active"
+  },
+  {
+    "id": 697300,
+    "title": "Some question",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/697300",
+    "post_date": "2026-05-05 18:18:55.055000",
+    "_seen_in": "hot,new,top,active"
+  },
+  {
+    "id": 697507,
+    "title": "Test well 000d7d20 also exists in train/  (intentional?)",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/697507",
+    "post_date": "2026-05-06 12:49:35.680000",
+    "_seen_in": "hot,new,top,active"
+  },
+  {
+    "id": 697506,
+    "title": "Starter guidance needed for this competition",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/697506",
+    "post_date": "2026-05-06 12:44:22.769000",
+    "_seen_in": "hot,new,top,active"
+  },
+  {
+    "id": 697500,
+    "title": "Coding platform",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/697500",
+    "post_date": "2026-05-06 12:14:27.746000",
+    "_seen_in": "hot,new,top,active"
+  },
+  {
+    "id": 697433,
+    "title": "I did a quick EDA for the well TVT competition",
+    "topic_url": "/competitions/rogii-wellbore-geology-prediction/discussion/697433",
+    "post_date": "2026-05-06 04:01:41.380000",
+    "_seen_in": "hot,new,top,active"
+  }
+]
