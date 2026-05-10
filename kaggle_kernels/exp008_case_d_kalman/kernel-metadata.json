@@ -1,0 +1,18 @@
+{
+  "id": "ky7240/rogii-exp008-case-d-kalman",
+  "title": "ROGII exp008 Case D Kalman",
+  "code_file": "exp008_case_d_kalman.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_tpu": "false",
+  "enable_internet": "false",
+  "dataset_sources": [
+    "karnakbaevarthur/rogii-code-helper-dataset",
+    "thermostatic/rogii-tabicl-v2-public-assets",
+    "thbdh5765/rogii-v1-train-cache"
+  ],
+  "competition_sources": ["rogii-wellbore-geology-prediction"],
+  "kernel_sources": []
+}
