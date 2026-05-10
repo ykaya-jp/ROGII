@@ -390,7 +390,33 @@ test_pred = test_meta['last_known_TVT'].to_numpy(dtype=float) + test_delta
 
 **top3-distill §6.4 との対応**: 完全同型 (`(1 - exp(-md_since/tau))` fade-in も `pred *= alpha` shrinkage も同じ)。R は `w_pf` の 3 軸目を加える ([top3-distill §6.3 step 5](top3-distill.dense.md))。pilkwang は 2 軸のみ。
 
-### 5.2 Savitzky-Golay smooth ([pilkwang:5723-5739](../../_research_kernels/pilkwang__rogii-eda-v4-same-matrix-super-stack/rogii-eda-v4-same-matrix-super-stack.py))
+### 5.2 Causal slope clip per well (★ pilkwang 固有)
+
+[pilkwang:4279-4324](../../_research_kernels/pilkwang__rogii-eda-v4-same-matrix-super-stack/rogii-eda-v4-same-matrix-super-stack.py):
+
+```python
+# (1) train wells 全部から |dTVT/dMD| を集計し、quantile を取って max_abs_slope を推定
+MAX_ABS_TVT_SLOPE_BY_QUANTILE = estimate_abs_tvt_slope_quantiles(
+    train_horizontal_files, quantiles=[0.90, 0.95, 0.975, 0.99, 0.995]
+)
+# 例: q=0.99 で max_abs_slope ≈ 0.5-1.0 ft/ft (= TVT が 1ft 進む間に MD が 1-2ft 進める速度)
+
+# (2) per-well, prev_tvt → curr_tvt の変化を |max_abs_slope * step_md| で hard clip
+for k in range(len(pos)):
+    step_md = abs(md[k] - prev_md)
+    limit = max_abs_slope * max(step_md, 1e-6)
+    clipped[pos[k]] = np.clip(clipped[pos[k]], prev_tvt - limit, prev_tvt + limit)
+    prev_tvt = clipped[pos[k]]  # ★ causal: clipped 値を次の anchor にする
+    prev_md = md[k]
+```
+
+**意味**: 物理的に **bit が 1 ft 進む間に TVT が ± δ ft しか動けない** という制約を hard clip。Outlier prediction (= 突発的な大ジャンプ) を強制的に丸める。q=0.90-0.995 を grid search で OOF RMSE 最良を選ぶ ([pilkwang:5452-5460](../../_research_kernels/pilkwang__rogii-eda-v4-same-matrix-super-stack/rogii-eda-v4-same-matrix-super-stack.py))。
+
+**top3-distill との差分**: R/N にない。pilkwang 固有の "safety clipping"。 **drift モデリングの暴発防止 + private LB の robust 化**に効果あり (= 公開 LB だけでなく hidden test でも効くはず)。
+
+**注**: ただし `RUN_SUPER_MONOLITH_STACK` path ([pilkwang:5836-6090](../../_research_kernels/pilkwang__rogii-eda-v4-same-matrix-super-stack/rogii-eda-v4-same-matrix-super-stack.py)) では **slope clip は使われていない** (= alpha × tau の 2 軸 grid のみ)。Strict / HGB diagnostic path のみで使用。同 kernel 内に **2 流派** が共存し、最終提出は seasonal alpha × tau 流派が選ばれている → slope clip は **safety guard としては実装済みだが super stack には load されていない**。
+
+### 5.3 Savitzky-Golay smooth ([pilkwang:5723-5739](../../_research_kernels/pilkwang__rogii-eda-v4-same-matrix-super-stack/rogii-eda-v4-same-matrix-super-stack.py))
 
 ```python
 from scipy.signal import savgol_filter
@@ -496,7 +522,13 @@ pilkwang が R/N から「追加した」要素を優先順で:
 
 **なぜ効くか**: R は 1 anchor (`beam_ref`) で 11 features。pilkwang は 2 anchor で **22 features** → 各手法の anchor 周辺の細かい "GR profile sensitivity" を多次元化。
 
-### 7.7 ★ Per-formation features の網羅 (6 formations × 7 features = 42 features)
+### 7.7 ★ Causal slope clip per well
+
+**追加内容**: `MAX_ABS_TVT_SLOPE_BY_QUANTILE = estimate_abs_tvt_slope_quantiles(train_files)` で train から TVT 速度上限を quantile で推定し、per-well causal hard clip ([pilkwang:4305-4324](../../_research_kernels/pilkwang__rogii-eda-v4-same-matrix-super-stack/rogii-eda-v4-same-matrix-super-stack.py))。
+
+**なぜ効くか**: outlier prediction を物理的上限で強制丸め → robust。但し pilkwang は **super stack path では使っていない** (= 開発済みだが採用見送り)。
+
+### 7.8 ★ Per-formation features の網羅 (6 formations × 7 features = 42 features)
 
 **追加内容**: ANCC のみでなく **6 formation 全部** で `b / b50 / prefix_rmse / prefix_mae / tvt_formula / delta / delta50` を per-formation 計算。
 
@@ -518,6 +550,7 @@ pilkwang が R/N から「追加した」要素を優先順で:
 | **TDBC + TDSC dual-anchor offset family** | 0.25 日 | -0.1〜0.3 | features 過剰で GBM が学習遅延 (overfit risk) | 既存 `src/rogii/features.py` に拡張。anchor=beam_cons / selfcorr の 2 種で 22 features |
 | **6-formation 全 features 化** | 0.25 日 | -0.1〜0.3 (既存 ANCC 中心 features がある前提) | features 数 +35 → memory + tree depth 増。GBM hyperparams の調整必要 (`min_child_samples` 増やす等) | 既存 imputer / features 流用で per-formation loop 追加するだけ |
 | **GPU preflight (LightGBM/CatBoost)** | 0.1 日 | LB 改善なし (但し submission 失敗時間ロス削減) | preflight 自体が tiny で 5 sec、リスク低 | 既存 submission script に `preflight_lightgbm_gpu` / `preflight_catboost_gpu` を import |
+| **Causal slope clip per well** (`estimate_abs_tvt_slope_quantiles` + `causal_slope_clip_by_well`) | 0.25 日 | -0.0〜0.2 (outlier 抑制効果のみ、平均 RMSE には影響小) | clip 過剰だと真の急変化 zone も抑制 | 既存 `src/rogii/postproc.py` に追加。q を grid search で選ぶ |
 | **alpha × tau grid post-process (existing と異なる軸組み合わせ)** | 0.1 日 | -0.1〜0.3 (existing post-proc と diversity ある場合) | 既存 post-proc と差異がない可能性 | 既存 `src/rogii/postproc.py` に grid 拡張 |
 
 **工数合計** (top 5 要素): **約 1.85 日** (= 約 15 時間、週 20h でも 1 日)。
