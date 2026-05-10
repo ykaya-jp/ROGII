@@ -201,6 +201,48 @@ Edge S はこの上で残った微小な off-grid 偏差を完全に除去して
 - どちらか先に COMPLETE になり次第、 `.venv/bin/kaggle kernels push -p kaggle_kernels/exp009_case_e_edge_o/` で v2 push
 - 本 subagent P のセッション内で polling 待機 (= 最大 30 分まで)、それを超えたら **中央に handoff**
 
+### 7.3 中央向け handoff (= 2026-05-11 08:25 UTC 時点)
+
+**subagent P の 30 分 polling 上限に到達** (08:25 UTC)、exp008 v2 と exp009 v1 が両方 RUNNING のままで GPU 上限解放されず。Monitor task `b4bs2bsh9` を 60 分 timeout で背景に armed しており、まだ動作中。
+
+**中央が引き継ぐべき作業**:
+
+1. **polling 継続 / Monitor 結果待ち** (= Monitor `b4bs2bsh9` が COMPLETE 通知を出すまで)、または手動:
+   ```bash
+   .venv/bin/kaggle kernels status ky7240/rogii-exp008-case-d-kalman
+   .venv/bin/kaggle kernels status ky7240/rogii-exp009-gp-edgeo
+   ```
+
+2. **GPU slot 解放後の exp009 v2 push**:
+   ```bash
+   cd /home/yusuke_kaya/projects/kaggle/ROGII
+   git checkout feat/phase-4-edge-s-roundgrid
+   .venv/bin/kaggle kernels push -p kaggle_kernels/exp009_case_e_edge_o/
+   ```
+   v2 として push される (= title / slug は変更しないので既存 kernel の version up)。
+
+3. **完了確認**: push 後に status polling、COMPLETE 後に submission.csv を取得
+   ```bash
+   .venv/bin/kaggle kernels output -p /tmp/exp009_v2_output ky7240/rogii-exp009-gp-edgeo
+   grep -E "Edge S|round-to|unique tvt|diff abs" /tmp/exp009_v2_output/rogii-exp009-gp-edgeo.log
+   ```
+
+4. **submit 順 (= UTC 5/11 reset 後)**:
+   - 想定 quota = 5 submission/day
+   - **優先度 1**: exp009 v2 (= GP + Edge O + Edge S, expected best)
+   - **優先度 2**: exp008 v2 (= Kalman + Edge S, 2nd best)
+   - **優先度 3**: exp005 v2 (= cache_blend + Edge S, Edge S 単独効果測定 control = baseline 10.317 からの差分が Edge S の純効果)
+
+### 7.4 submit 戦略 (= 中央判断材料)
+
+| kernel | base LB | Edge S 期待効果 | 想定 v2 LB |
+|---|---|---|---|
+| exp005 v2 (control) | 10.317 | -0.05 ~ -0.30 | **10.02 ~ 10.27** |
+| exp008 v2 | exp008 v1 (= 未確定) | -0.05 ~ -0.30 | 9.x 帯 |
+| exp009 v2 | exp009 v1 (= 未確定) | -0.05 ~ -0.30 | 8.x 帯 (= **9 切り**) |
+
+**exp005 v2 LB が 10.02-10.27 帯に着地** すれば、Edge S 単独効果が **0.05-0.30** 範囲で確証される。これを **exp008/exp009 v2 への期待値補正** に使うのが王道。
+
 ---
 
 ## 8. license / 帰属
