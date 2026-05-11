@@ -1,0 +1,141 @@
+# CV vs public LB correlation — 結果 (進行中)
+
+> task: `.criteria/kaggle-rogii-cv-strategies-2026-05-11.yaml`
+> branch: `feat/cv-strategies-final-2026-05-11`
+> 目的: 4 CV (C1-C4) と baseline plain GroupKFold の OOF を 8 SCORED (+ RUNNING exp010) で再生成、 LB との Spearman/Pearson/LOO/bootstrap を測定し、 最良 CV を確定する。
+> 形式: 段階的に更新、 最終的に AC-6 / AC-7 / AC-9 / AC-10 を満たす。
+
+---
+
+## 1. Phase 2.0 = fold parquet 早期 diagnostic (= 2026-05-11)
+
+`scripts/build_fold_parquets.py` で 5 CV strategy × 773 train wells の fold 配分を事前生成。 **base re-train は未着手** (= compute heavy)、 ここまでは fold 配分の構造的性質のみを評価する数理 diagnostic。
+
+### 1.1 fold size balance
+
+| CV | 戦略 | fold sizes (5 fold) | max/min | dropped | leak check |
+|---|---|---|---|---|---|
+| baseline | plain GroupKFold by well | 155, 155, 155, 154, 154 | **1.006** | 0 | n/a (well 直 split) |
+| **C1** | pseudo-test fold via kNN (= test 類似 wells を fold 0 集約) | 140, 159, 158, 158, 158 | **1.136** | 0 | no leak |
+| **C2** | multi-key stratified (visible_ratio × tw_gr_resid_std) | 161, 155, 152, 152, 153 | **1.059** | 0 | no leak (= 752 groups OK) |
+| **C3** | adversarial drop (= baseline + 20% test-unlike wells excluded) | 118, 128, 126, 116, 126 | **1.103** | **159** | n/a (= baseline base) |
+| **C4** | typewell hash GroupKFold (= Edge Q v2) | 155, 155, 155, 154, 154 | **1.006** | 0 | no leak (= 752 groups OK) |
+
+**観察**:
+- baseline + C4 が **完全 balance** (= max/min = 1.006)。 C2 / C3 / C1 は若干 unbalanced だが、 全部 max/min ≤ 1.14 で許容範囲。
+- C3 で **159 wells dropped** (= 全 train 773 wells 中 20.6% = 設定値 drop_quantile = 0.20 に整合)。
+
+### 1.2 数理 diagnostic finding
+
+#### F-D1: C3 adversarial AUC = **0.3167** (test n=3 で不安定)
+
+```
+fit_adversarial_classifier 5-fold OOF AUC = 0.3167
+train test-likelihood: min=0.04 max=0.10 mean=0.06
+```
+
+- AUC < 0.5 = **classifier が逆に train を train として識別**、 ただし test n=3 で AUC 推定 unstable
+- 数理意味: H-divergence ≈ |2 AUC - 1| = 0.37、 distribution shift は **軽度** (= 0.5 を中心に 0.37 偏り)
+- 含意: **adversarial drop の effect は限定的** = C3 alone で大幅 LB 改善は期待薄、 ただし C2 / C4 baseline に combined inject なら marginal lift 可能
+
+#### F-D2: C4 b_cluster balance p_value = **0.0424** (= 5% 有意で偏在)
+
+```
+fold × b_cluster pivot shape: (5, 87)
+chi-square p-value = 0.0424
+```
+
+- p < 0.05 で **fold ⊥ b_cluster の null 棄却** = typewell hash GroupKFold は b_cluster (F1) を偶発的に偏在させる
+- 数理意味: C4 単体は **F8 (typewell leak free)** を保証するが、 **F1 (b_cluster 2 種 rep)** は満たさない
+- 含意: **C2 (= multi-key stratify、 ただし default は visible_ratio + tw_gr_resid_std で b_cluster 未含)** + b_cluster を stratify_specs に追加した C2.v2 が必要、 もしくは C4 fold 後の post-hoc rebalance
+
+#### F-D3: C1 pseudo-test fold 0 sample = 140 wells (= 5 CV 中最小)
+
+```
+C1 fold sizes: 140 (fold 0 = pseudo-test), 159/158/158/158 (其他)
+```
+
+- fold 0 (= test 3 wells に kNN 距離で近い train wells、 K=50/test_well × 3 wells で union 後 dedup)
+- 140 / 773 = **18.1%** が test 類似 train wells = LB との rank 整合性測定の主要 indicator
+- 数理意味: fold 0 OOF RMSE が他 fold より大きく / 小さく動くか = **test 分布での予測難度を直接 surrogate**
+
+### 1.3 暫定仮説 (= base re-train 前の数理推測)
+
+1. **C2 が一番 robust** な可能性 (= 多軸 stratify + F8 leak free)。 ただし **default stratify_specs に b_cluster を含めるべき** (= F-D2 から、 F1 を直接 strat する value)。 → 次 step で `stratify_specs=[("visible_ratio", "quantile", 5), ("tw_gr_resid_std", "quantile", 4), ("b_ANCC_med", "quantile", 3)]` で再評価。
+2. **C3 adversarial drop の単独効果は限定的** (= AUC 0.32 で shift 軽度)。 C2/C4 base に combined inject すれば marginal lift。
+3. **C1 fold 0 OOF RMSE は LB-proxy として valuable** (= 140 wells が test 類似)。 ただし他 fold の OOF は「典型的 train wells」 で LB-proxy ではない。 全 OOF を pool した overall RMSE は valid だが、 fold 0 単独 を LB proxy として併記すべき。
+4. **C4 単独は F1 偏在で risky** (= b_cluster balance p < 0.05)。 C4 を採用するなら必ず b_cluster post-hoc audit を併記。
+
+---
+
+## 2. Phase 2.1 = 各 SCORED の base re-train + OOF 再生成 (= 未着手)
+
+### 2.1 残作業
+
+1. **kernel patch**: 各 SCORED kernel (= kaggle_kernels/expN/expN.py) に `FOLD_OVERRIDE_PARQUET` env var を読む logic を inject (= 5-10 行/kernel × 9 kernel)
+2. **scripts/regenerate_oof.py**: 各 SCORED に対し `FOLD_OVERRIDE_PARQUET=outputs/folds/<cv>.parquet` で kernel を invoke、 OOF を `outputs/oof/cv-lb-correlation/{exp}_{cv}.parquet` に保存
+3. **compute**: karnakbaev pretrained re-fit が 1 fold あたり 30+ min × 5 fold × 5 CV × 9 SCORED = 80-100 hr local CPU、 Colab/Kaggle Notebook 4-server 並列で wall clock 20-30 hr
+4. **tools/measure_cv_lb_correlation.py**: Spearman/Pearson/LOO/bootstrap CI を計算
+
+### 2.2 SCORED + PENDING
+
+| exp | submitted | scored? | LB | 用途 |
+|---|---|---|---|---|
+| exp002 | 5/10 13:25 | ✓ | 14.695 | LGB baseline (= sanity outlier) |
+| exp003 | 5/10 15:58 | ✓ | 17.510 | tysig 単独 failure (= outlier) |
+| exp005 | 5/10 16:14 | ✓ | 10.317 | karnakbaev base |
+| exp006 | 5/10 16:51 | ✓ | 10.503 | + TabICL (失敗) |
+| exp007 | 5/10 22:10 | ✓ | 10.677 | + Edge Q + 自前 4 base |
+| exp005 v2 | 5/11 00:13 | ✓ | 10.203 | + Edge S round-to-grid |
+| exp005 v3 | 5/11 00:32 | ✓ | 10.387 | + Edge R online (失敗) |
+| exp008 v2 | 5/11 03:15 | ✓ | **9.957** ✅ | + 案 D Kalman (= 現 best) |
+| exp009 v2 | 5/11 05:37 | PENDING | TBD | + Sparse GP + Edge O |
+| exp008 v3 | 5/11 08:31 | PENDING | TBD | + Huber + hetero + path b |
+| exp010 | 5/11 14:42 | kernel RUNNING | TBD | + stratified Edge Q + adversarial drop |
+
+= 8 SCORED + 3 PENDING/RUNNING。 PENDING 完走で sample size 拡大 (= 9-11 件)。
+
+---
+
+## 3. 最良 CV 確定 — 宣言 (= Phase 2.1 完了後に埋める placeholder)
+
+(Phase 2.1 = OOF 再生成 + correlation 測定が終わるまで未確定)
+
+予定 format:
+
+```
+最良 CV = C? (= 戦略名)
+
+multi-metric table (= 5 CV × 4 metric):
+| CV | Spearman | Pearson | LOO 平均 | Bootstrap 95% CI lower | composite | exp003 除外 rank |
+| baseline | ... | ... | ... | ... | ... | ... |
+| C1 | ... | ... | ... | ... | ... | ... |
+| C2 | ... | ... | ... | ... | ... | ... |
+| C3 | ... | ... | ... | ... | ... | ... |
+| C4 | ... | ... | ... | ... | ... | ... |
+
+選定理由 (= 5 観点):
+1. composite score 最大
+2. exp003 除外時も上位 (= robust)
+3. fold balance 確認済
+4. 解釈可能性 ◯
+5. 既存 paradigm との互換性
+
+Jensen lower bound 改善:
+- exp007 σ_fold = 1.175 ft → CV 天井 10.77 ft
+- 最良 CV exp007 σ_fold = X.XXX → CV 天井 X.XX ft (= 改善幅 -Δ ft)
+
+次タスク = kaggle-rogii-winning-candidates-cv-test-2026-05-12
+  「優勝路手法 A-E (= NN paradigm / deepest EDA D1+D4+D9 /
+   Sparse GP M=500 / Per-Well MoE / LLM-driven) を 最良 CV で測定」
+```
+
+---
+
+## 4. 関連 doc / 出典
+
+- `docs/research/2026-05-11-cv-strategy-candidates.dense.md` — 設計書 (= 4 CV の数理本質)
+- `docs/research/2026-05-11-test-distribution.dense.md` — F1-F8 finding
+- `docs/dev/2026-05-11-h10-postmortem-and-fold-reform.dense.md` — H10 = Jensen lower bound 起源
+- `scripts/build_fold_parquets.py` — 本 doc § 1 の元 script
+- `outputs/folds/summary.json` — fold parquet metadata

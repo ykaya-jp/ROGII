@@ -1,0 +1,88 @@
+[
+  {
+    "cv": "baseline",
+    "path": "outputs/folds/baseline.parquet",
+    "n_wells": 773,
+    "n_dropped": 0,
+    "fold_sizes": {
+      "0": 155,
+      "1": 155,
+      "2": 155,
+      "3": 154,
+      "4": 154
+    },
+    "fold_size_min": 154,
+    "fold_size_max": 155,
+    "fold_size_max_over_min": 1.0064935064935066
+  },
+  {
+    "cv": "C1",
+    "path": "outputs/folds/C1.parquet",
+    "n_wells": 773,
+    "n_dropped": 0,
+    "fold_sizes": {
+      "0": 140,
+      "1": 159,
+      "2": 158,
+      "3": 158,
+      "4": 158
+    },
+    "fold_size_min": 140,
+    "fold_size_max": 159,
+    "fold_size_max_over_min": 1.1357142857142857
+  },
+  {
+    "cv": "C2",
+    "path": "outputs/folds/C2.parquet",
+    "n_wells": 773,
+    "n_dropped": 0,
+    "fold_sizes": {
+      "0": 161,
+      "1": 155,
+      "2": 152,
+      "3": 152,
+      "4": 153
+    },
+    "fold_size_min": 152,
+    "fold_size_max": 161,
+    "fold_size_max_over_min": 1.0592105263157894
+  },
+  {
+    "cv": "C3",
+    "path": "outputs/folds/C3.parquet",
+    "n_wells": 773,
+    "n_dropped": 159,
+    "fold_sizes": {
+      "0": 118,
+      "1": 128,
+      "2": 126,
+      "3": 116,
+      "4": 126
+    },
+    "fold_size_min": 116,
+    "fold_size_max": 128,
+    "fold_size_max_over_min": 1.103448275862069,
+    "adversarial_auc": 0.31673134971970673
+  },
+  {
+    "cv": "C4",
+    "path": "outputs/folds/C4.parquet",
+    "n_wells": 773,
+    "n_dropped": 0,
+    "fold_sizes": {
+      "0": 155,
+      "1": 155,
+      "2": 155,
+      "3": 154,
+      "4": 154
+    },
+    "fold_size_min": 154,
+    "fold_size_max": 155,
+    "fold_size_max_over_min": 1.0064935064935066,
+    "b_cluster_balance_p_value": 0.042429442266793,
+    "b_cluster_balance_pivot_shape": [
+      5,
+      87
+    ]
+  }
+]
