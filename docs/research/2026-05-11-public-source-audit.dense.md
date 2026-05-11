@@ -74,6 +74,89 @@ worst = diff.sort_values("abs_err", ascending=False).head(100)
 
 ---
 
+### 1.5 `thbdh5765/rogii-v4-aeroridge-train-cache` (1.57 GB、 5/11 公開) — ★★ **超 valuable** (= 我々より上位)
+
+**内容**:
+- `aeroridge_train_core_df.pkl` (= **3.66 GB**! 5,076,795 rows × N cols)
+- `aeroridge_train_core_schema.csv` = 列定義
+- `aeroridge_train_core_preview_1000.csv` (46 KB) = head preview
+- `README.md` + `cache_build.{out,err}.log`
+
+**author**: thbdh5765 / hoang_phuc_6868 = **rank 36/779、 LB 9.916** (= **我々 9.957 より +0.04 ft 良い、 Silver high 圏**)
+
+**features (= 我々と比較)**:
+- pf (Particle Filter): pf_ancc, pf_ancc_std, pf_ancc_delta, pf_z, pf_z_delta, pf_vs_z, pf_std_trend
+- Beam: beam_cons_d, beam_loose_d, beam_sm5_d, beam_mean_d, beam_std_d, beam_med_d (= 6 features)
+- Self-NCC multi-scale: sc8_d, sc8_score, sc15_d, sc15_score, sc25_d, sc25_score, sc_cons_d, sc_trust
+- **hyb_d** ← **既存 karnakbaev / 我々 base にない hybrid metric**
+- 6 formation imputed: ANCC, ASTNU, ASTNL, EGFDU, EGFDL, BUDA (= 同 karnakbaev)
+
+**判定**:
+- ✅ **paradigm 2 流用 valuable** (= LB 9.916 解法の features re-use 可能)
+- ✅ **hyb_d は新規 feature** = 既存 base に inject 候補 = 数理本質 ✅ (= 我々が未実装の features 取り込み)
+- ROGII v4 「AeroRidge」 paradigm = 詳細不明 (= README 読む必要)
+
+**注意**:
+- file size 3.66 GB = git commit 不可 (= dataset 経由のみ)
+- kernel に attach: `/kaggle/input/rogii-v4-aeroridge-train-cache/aeroridge_train_core_df.pkl` で load
+- 我々 kernel に直接 attach 可能 (= dataset_sources 追加)
+
+**ablation 戦略**:
+1. **新規 features only inject** (= hyb_d 単体を我々の 165 cols に追加) → LB lift 検証
+2. **AeroRidge entire features re-use** (= 5M rows × N cols を load、 我々 self-base 4 model を fit) → LB 9.916 帯 sanity check
+3. **Top 36 解法の Ridge meta blend** (= aeroridge 解法を 1 base として既存 9-base に追加 = 10-base ensemble)
+
+期待 LB lift: **-0.05 〜 -0.15 ft** (= LB 9.916 + 9.957 の corr 仮定で blend benefit limited、 ただし hyb_d 単体 inject なら新規 feature による独自 lift も possible)
+
+**★★★ 極めて重要な追加発見 (= aeroridge schema full 列分析)**:
+
+178 columns、 そのうち最後の方に:
+- **`aug_k` (int32)** = augmentation key
+- `well_id` (object)
+
+= 5M rows = 773 wells × 6500 rows ≈ **773 × ~6.5K augmented samples/well**。 つまり Top 36 解法 (= LB 9.916) は **data augmentation** を採用している。
+
+**augmentation paradigm の数理本質**:
+- 各 well で **visible/hidden 境界を ランダム化** (= visible 5% / 10% / 15% / 20% / 25% / 30% 等で複数 sample 作成)
+- これにより LGB は「any visible_ratio に robust な model」 を学習
+- = test wells (= visible_ratio 20-33%) に **直接 train signal** 提供
+
+**我々 vs aeroridge の決定的違い**:
+| 観点 | 我々 (= exp008 v2) | aeroridge (= LB 9.916 Top 36) |
+|---|---|---|
+| Train data | 773 wells × 1 fixed visible_pos | 773 wells × **~6.5K augmented samples** |
+| augmentation paradigm | × 不在 | ✓ visible_pos random |
+| 結果 LB | 9.957 (Silver low) | **9.916 (Silver high、 Top 36)** |
+
+**戦略仮説 (= 大発見)**:
+- 我々の LB 9.957 → 9.916 (= -0.04 ft) 差は **augmentation の有無** で完全説明可能
+- **augmentation 採用** = 我々が見逃していた **paradigm 5** (= 4 paradigm に追加すべき)
+- これは「優勝路手法 F (= data augmentation)」 として新候補化
+
+**実装 sketch**:
+```python
+def augment_well(well_df, target_visible_ratios=[0.05, 0.10, 0.15, 0.20, 0.25, 0.30]):
+    n = len(well_df)
+    augmented = []
+    for vr in target_visible_ratios:
+        # Re-mask visible/hidden boundary at this visible ratio
+        boundary = int(n * vr)
+        aug = well_df.copy()
+        aug.loc[aug.index[boundary:], "TVT_input"] = np.nan
+        aug["aug_k"] = vr
+        augmented.append(aug)
+    return pd.concat(augmented)
+```
+
+これを既存 train pipeline に inject 可能。
+
+**期待 LB lift (= augmentation 採用)**:
+- aeroridge 解法と同じ LB 9.916 帯到達は plausible (= 同 paradigm、 我々の他 base 強化と combined)
+- 我々の baseline + augmentation = LB 9.85-9.92 帯到達可能性 (= -0.05 〜 -0.10 ft lift)
+- これは **本タスク完了後の優先実装 path** = winning path F (= augmentation) として確立
+
+---
+
 ### 1.4 `nina2025/rogii-03` (495 KB、 5/11 公開) — ★ **超 valuable**
 
 **内容**:
