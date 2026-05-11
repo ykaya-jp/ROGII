@@ -179,3 +179,5 @@ Jensen lower bound 改善:
 - `docs/dev/2026-05-11-h10-postmortem-and-fold-reform.dense.md` — H10 = Jensen lower bound 起源
 - `scripts/build_fold_parquets.py` — 本 doc § 1 の元 script
 - `outputs/folds/summary.json` — fold parquet metadata
+- `tools/measure_cv_lb_correlation.py` — 本 doc § 3 (= 結果セクション) 自動生成元
+- `scripts/regenerate_oof.py` — § 2.1.b kernel push automation
