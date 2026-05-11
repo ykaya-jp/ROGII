@@ -15,8 +15,8 @@
 | 2026-05-11 00:13 | 52528539 | exp005 v2 | karnakbaev blend + **Edge S** (round-to-grid) | (no 自前 CV) | **10.203** ✅ | - | exp005 → -0.114 改善 | - | kernel: `ky7240/rogii-exp005-cache-blend` v2。subagent P 構築、Edge S 単独効果測定 control。**Edge S 単独 = -0.114 ft 改善 (= 予測 10.05-10.27 範囲内、想定 -0.05〜-0.30 の中域)**。Gold cutoff (9.919) まで -0.284 ft 不足、**Edge S 単独では Gold 不可** |
 | 2026-05-11 00:32 | 52528863 | exp005 v3 | karnakbaev blend + Edge S + **Edge R** (test-time online learning, continued training on test visible TVT_input) | (no 自前 CV) | **10.387** ⚠️ | - | exp005 v2 → **+0.184 悪化** | - | kernel: `ky7240/rogii-exp005-cache-blend` v3。subagent U 構築、Edge R 単独効果測定。**🚨 想定 9.65-9.95 を大きく外れ +0.435 ft 悪化方向**。kernel log で Edge R phase 正常動作確認 (= diff abs mean 0.177、w_R 0.5、applied True)、実装 bug なし。**Edge R REFUTED 確定 = base-dependent**: 公開 698002 raw LGB tysig (LB 11.068 base) で +0.37 報告だが我々 karnakbaev pretrained 5-base (LB 10.2 base) では +0.184 worse、 posterior 上書き害。 根本仮説 3 件: (H-R1) base model 依存、(H-R2) w_R=0.5 が過大、(H-R3) augmentation 不足 (= 300 row × 3 wells)。**学び: pane 2 「最高 ROI 1 手」revoke、 online TTA 採用禁止、 5/12 plan で Edge R 除外** |
 | 2026-05-11 03:15 | 52532035 | exp008 v2 | exp007 base + **案 D (Kalman/PF on dTVT, AR(1) Yule-Walker MLE + global shrinkage, 7 features)** + Edge S | TBD | **9.957** ✅ | - | **9 切り達成!! Silver ギリギリ rank 50** | - | kernel: `ky7240/rogii-exp008-case-d-kalman` v2。subagent V 構築、案 D Kalman/PF 単独効果測定。**最初の 9 帯 SCORED**、9 切り戦略 milestone 1 達成。 Gold cutoff (= Top 10 = 9.728) まで -0.229 ft、 exp008 v3 / exp009 v2 SCORED 待ち |
-| 2026-05-11 05:37 | 52534803 | exp009 v2 | exp008 v2 base + **案 E (Sparse GP for ANCC posterior + variance, 24 features, sklearn Matern 3/2 ARD + K-Means inducing M=200)** + **Edge O (direction-aware Beam/NCC, 7 features)** + Edge S | TBD | _PENDING_ | - | - | - | kernel: `ky7240/rogii-exp009-gp-edgeo` v2。expect: 9.957 → **9.5-9.7 帯 (= 8 帯射程、Top 10 圏)** |
-| 2026-05-11 08:31 | 52539046 | exp008 v3 | exp008 v2 + **Huber loss + heteroscedastic sample_weight + Multi-seed MEDIAN x3 seed x 5 fold + path b kb-avg + own-Ridge separate blend** | TBD | _PENDING_ | - | - | - | kernel: `ky7240/rogii-exp008-case-d-kalman` v3。expect: 9.957 → **9.5-9.8 帯 (= Gold 確実)** |
+| 2026-05-11 05:37 | 52534803 | exp009 v2 | exp008 v2 base + **案 E (Sparse GP for ANCC posterior + variance, 24 features, sklearn Matern 3/2 ARD + K-Means inducing M=200)** + **Edge O (direction-aware Beam/NCC, 7 features)** + Edge S | TBD | **9.738** ✅✅ | - | **9 切り達成、 rank 17/779 (= 53→17、 +36 ランクアップ)** | - | kernel: `ky7240/rogii-exp009-gp-edgeo` v2。 SCORED 13:30 UTC 頃。 **paradigm ② Sparse GP が work、 LB 9.957 → 9.738 で -0.219 ft 改善**。 Gold cutoff (= Top 10 = 9.597) まで -0.141 ft。 Top 1 (Virtute 9.132) まで -0.606 ft。 **これが現 best、 winning path C (= Sparse GP M=500 拡張) の direct motivation** |
+| 2026-05-11 08:31 | 52539046 | exp008 v3 | exp008 v2 + **Huber loss + heteroscedastic sample_weight + Multi-seed MEDIAN x3 seed x 5 fold + path b kb-avg + own-Ridge separate blend** | TBD | **10.253** ⚠️⚠️ | - | exp008 v2 → +0.296 悪化 | - | kernel: `ky7240/rogii-exp008-case-d-kalman` v3。 SCORED 13:30 UTC 頃。 **subagent T 改修 (= Huber+hetero+MEDIAN+path b) が逆効果**、 LB 9.957 → 10.253 で 大幅悪化。 **学び**: (a) Huber loss は MSE optimal pipeline で逆効果、 (b) hetero sample_weight は CV 増加に対し fragile、 (c) path b kb-avg + own Ridge separate は kb-side weight 過小評価可能性。 = **これらの 4 改修 すべて REFUTED**、 winning path 候補に組み込まない |
 | 2026-05-11 14:42 | (= kernel push、 RUNNING) | exp010 | exp008 v3 base + **stratified Edge Q fold (= tw_gr_resid_std quartile stratify) + adversarial validation drop (= top-20% test-likely train wells を sample_weight 0.5)** | smoke: σ_fold 0.526→0.303 (-42%) | _RUNNING_ (19h+) | - | - | - | kernel: `ky7240/rogii-exp010-foldreform-v1`。 H10 = Jensen lower bound 10.77 ft 解消の fold 構造改革。 σ_fold 1.18 → 0.5 で CV 天井 10.0-10.3 ft 想定、 LB expect 9.5-9.7 |
 
 ## 主要 LB ベンチマーク (2026-05-11 取得 = 公開 LB Gold cutoff の実態)
@@ -46,12 +46,16 @@
 | 19 | Kevin E R MILLE | 2026-05-10 14:55 | 9.914 |
 | 20 | spbforce | 2026-05-10 08:41 | **9.919** |
 
-> **Medal cutoff (= 777 teams、 Kaggle 250-999 公式ルール、 2026-05-11 09:50 UTC 取得)**:
-> - **Gold (= Top 10)**: LB **9.728** (= Proteek Chaudhuri @ 10位)
-> - **Silver (= Top 50)**: LB **9.957** (= 我々 Reexel @ rank 50、 ギリギリ Silver)
-> - **Bronze (= Top 100)**: LB ≈ 10.5 (推定、 詳細は full LB CSV 参照)
-> 賞金圏 (= 1-4 位) cutoff: **9.415** (= anshul3501 @ 4位)。 Top 1: **9.132** (Virtute、 5/11 00:02 更新で前日 9.256 から -0.124 改善)。
-> 我々現状 9.957 (rank 50/777) から Gold (Top 10) まで **-0.229 ft**、 Top 4 賞金圏まで **-0.542 ft**、 Top 1 まで **-0.825 ft**。
+> **Medal cutoff (= 779 teams、 Kaggle 250-999 公式ルール、 2026-05-11 13:56 UTC update)**:
+> - **Gold (= Top 10)**: LB **9.597** (= Kazuki Harada @ 10位)
+> - **Silver (= Top 50)**: 推定 ~9.95 帯 (= 我々 17 位 9.738 は Silver 高位)
+> - **Bronze (= Top 100)**: LB ≈ 10.3 (推定)
+> 賞金圏 (= 1-4 位) cutoff: **9.374** (= anshul3501 @ 4位)。 Top 1: **9.132** (Virtute)。
+>
+> **我々 Reexel = rank 17/779 (= 5/11 13:56 UTC update、 53→17 で 36 ランクアップ)** ← **9 切り達成**!
+> exp009 v2 (= Sparse GP M=200 + Edge O + Edge S) で **LB 9.738** = Silver 高位、 Gold まで **-0.141 ft**。
+>
+> Top 4 賞金圏まで **-0.364 ft**、 Top 1 まで **-0.606 ft**。
 > Deadline: **2026-08-05 23:59 UTC** (= 86 day 残)。
 >
 > **修正履歴 (2026-05-11)**: 過去記載「Gold cutoff (= Top 20) = 9.919」 は teams 数未確認 (= 当時 713 teams を想定して Top 20 = 0.1%×713 + 5 ≈ 12 で Gold と推定したが、 Kaggle 公式 medal rule は **250-999 teams で Top 10 = Gold 固定**) で誤り。 9.919 は **Silver 圏内 (= Top 20 付近)** に該当。 表内 cell 中の「Gold cutoff (9.919) まで -X.XXX」 表現は当時のままだが、 真の Gold cutoff は **9.728** (= Top 10) で再評価必要。
