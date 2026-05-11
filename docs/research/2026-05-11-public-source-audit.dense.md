@@ -323,6 +323,37 @@ Sx = np.column_stack([... 9 base ..., top2_ensemble])
 
 ---
 
+### 1.6 軽量 batch audit (= innerf1re / iathar / geeknik / nina2025-07、 2026-05-11)
+
+#### innerf1re/rogii-blend-srcs-public (= 430 KB)
+- 内容: karn.csv + v3.csv + v5_edge.csv (= 3 submission CSV)
+- author Max Manushin = rank 175/779, **LB 10.369** (= 我々 -0.4 ft 悪)
+- 判定: ❌ submission only paradigm 1、 author LB 我々より下位 = 採用不要
+
+#### iathar/rogii-wellbore-models (= 2.2 MB)
+- 内容: lgbm_fold1-5.pkl + xgb_fold1-5.pkl + ridge_fold*.pkl (= per-fold artifacts、 paradigm 2 candidate)
+- author iathar = rank 691/779, **LB 34.07** (= experiment 段階、 train 未収束)
+- 判定: ❌ author LB 不適格 (= 34 ft = 全体平均的に外している)、 採用不要
+
+#### geeknik/rogii-blend-public (= 71 KB)
+- 内容: submission_blend.csv 1 件
+- author geeknik = rank 256/779, **LB 10.782** (= 我々 -0.8 ft 悪)
+- 判定: ❌ submission only + author LB 下位、 採用不要
+
+#### nina2025/rogii-07 (= 1.1 MB)
+- 内容: 8 submission CSV (= 10.784 / 11.284 / 12.049 / 12.449 / 12.647 / 13.089 / 13.241 / 13.435)
+- author F.A.Nina = rank 147/779, LB 10.252 (= nina-03 9.956 とは別 progression、 古い時期の sub 群)
+- 判定: ❌ 全 sub が 10.7+ で我々 9.957 より大幅下位、 採用不要
+
+### 1.7 ★ enisteper1/rogii-train-dataset (= 937 MB、 audit pending)
+
+- author **Enis Teper = rank 54/779、 LB 9.960** ← **我々 rank 53 LB 9.957 と same band**!
+- content: 937 MB train dataset (= 別 train data version の可能性 = paradigm 2 重要 lift candidate)
+- audit: download 進行中、 内容次第で **超 valuable** (= 9.96 band 解法の train data) or feature engineering 流用候補
+- **expected blend benefit ≈ 0** (= aeroridge/nina-03 と同様 corr 0.99+ の可能性高い)、 ただし train data に **我々未実装の features** が含まれれば valuable
+
+---
+
 ## 2. 未 audit dataset (= 次タスクで個別 audit)
 
 | dataset | size | last update | 推測内容 | audit priority |
