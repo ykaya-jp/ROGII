@@ -1,0 +1,20 @@
+{
+  "id": "ky7240/rogii-exp013-winning-b-on-v2",
+  "title": "ROGII exp013 winning B on v2",
+  "code_file": "exp013_winning_path_b_on_v2.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_tpu": "false",
+  "enable_internet": "false",
+  "dataset_sources": [
+    "karnakbaevarthur/rogii-code-helper-dataset",
+    "thermostatic/rogii-tabicl-v2-public-assets",
+    "thbdh5765/rogii-v1-train-cache",
+    "ky7240/rogii-per-well-stats",
+    "ky7240/rogii-winning-path-b-features"
+  ],
+  "competition_sources": ["rogii-wellbore-geology-prediction"],
+  "kernel_sources": []
+}
