@@ -25,6 +25,7 @@ dependencies = [
     "lightgbm>=4.5",
     "xgboost>=2.1",
     "catboost>=1.2",
+    "numba>=0.60",
     "darts>=0.30",
     "sktime>=0.34",
     "statsforecast>=2.0",
