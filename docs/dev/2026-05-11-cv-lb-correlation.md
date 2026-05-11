@@ -181,3 +181,58 @@ Jensen lower bound 改善:
 - `outputs/folds/summary.json` — fold parquet metadata
 - `tools/measure_cv_lb_correlation.py` — 本 doc § 3 (= 結果セクション) 自動生成元
 - `scripts/regenerate_oof.py` — § 2.1.b kernel push automation
+- `scripts/aggregate_oof.py` — § 2.1.d kernel output 集約 → oof_table.parquet
+
+---
+
+## 5. 次タスク plan draft (= AC-12)
+
+### 5.1 task_id: kaggle-rogii-winning-candidates-cv-test-2026-05-12
+
+本タスク (= cv-strategies-2026-05-11) が確定する **最良 CV を基準** に、 優勝路手法 A-E の CV 改善を測定する。
+
+### 5.2 検証対象 (= 5 候補、 deepest EDA + GM mindset 由来)
+
+| ラベル | 戦略 | 期待 CV 改善 (vs exp008 v2 baseline) | paradigm | compute |
+|---|---|---|---|---|
+| **A** | **GPU NN sequence model 追加** (= Mamba / Transformer / 1D-CNN on GR+dTVT) | -0.3 〜 -0.6 ft | ② 自前 compiler/solver 拡張 | GPU 必須、 5-10 hr/run |
+| **B** | **deepest EDA D1 + D4 + D9 を LGB stack に添加** (= b_well 67 cluster ID + b_jump_max_abs + 6 formation top per-well median) | -0.4 〜 -0.9 ft | ③ force/hand-craft (= 公開上位未使用 path) | CPU 0.5-1 hr/run |
+| **C** | **Sparse GP M=200 → M=500-1000** + posterior variance 明示注入 | -0.2 〜 -0.5 ft | ② 既存 GP 強化 | GPU 3-5 hr/run |
+| **D** | **Per-Well MoE wrapper** (= visible_ratio / b_cluster で per-well 専用 expert + gating blend) | -0.3 〜 -0.5 ft | ② 構造変更 (= 単一 model → MoE) | CPU 1-2 hr/run |
+| **E** | **LLM-driven posterior synthesis** (= Claude / GPT で per-test-well 推論 + ANCC 復元 program synthesis) | ?? (= 0 〜 -1.0 ft) | ④ **新規 paradigm** (= ROGII 前例なし) | CPU 0.5 day prototype |
+
+### 5.3 検証順序 (= 数理的優先度)
+
+1. **B** が最優先 (= compute 軽い + 公開上位未使用 path の独自 lift)、 CV 確定後 0.5-1 day で smoke
+2. **A** が次 (= paradigm 新規追加で gold zone 5 必要条件 #3 を満たす)、 GPU 環境前提
+3. **E** は探索的 paradigm (= reward unknown だが ROGII で前例なし)、 LLM 試作で早期確認
+4. **C** + **D** は既存路線強化 (= base improve)、 priority 低
+
+### 5.4 未統合 host dataset (= 2026-05-11 kaggle datasets list -s rogii で発見)
+
+| dataset | size | last update | 推測内容 | 取り込み判断 |
+|---|---|---|---|---|
+| `thbdh5765/rogii-v4-aeroridge-train-cache` | 1.57 GB | 2026-05-11 04:53 | AeroRidge 系 train feature cache (= 別 base 候補) | E に統合候補 (= 公開 source 拡張) |
+| `akshankrithick/rogii-gold-top10-direction-source` | 138 KB | 2026-05-09 07:03 | Gold Top10 解法の direction source | 内容確認後、 E に統合候補 |
+| `buchananliang/rogii-karnak-top2-public-artefacts` | 6.6 MB | 2026-05-08 04:07 | Top2 (= karnakbaev 系) 解法 public artifacts | 既存 karnakbaev base と差分確認、 重複なら不要 |
+| `nina2025/rogii-03` / `rogii-07` | 0.5 MB / 1.1 MB | 5/7-11 | 小規模 utility (= 詳細不明) | 確認後判断 |
+| `alfaxadeyembe/rogii-lgbm-model-artifacts` | 1.2 MB | 2026-05-09 | LGBM 訓練済み artifacts | E に組み込み候補 |
+
+これらは「優勝路手法 E (= 公開 source 集約)」 の素材。 次タスクで `kaggle datasets download` + 内容 audit + ROGII evaluation pipeline に attach 可能性検討。
+
+### 5.5 plan 起票時の出典 / context
+
+- `.criteria/kaggle-rogii-cv-strategies-2026-05-11.yaml` — 本タスク (= CV 確定)
+- 本 doc § 3 「最良 CV 確定」 — 次タスクの基準 CV
+- `docs/research/2026-05-11-cv-strategy-candidates.dense.md` § 5 — 候補手法の数理本質
+- `docs/research/2026-05-11-deepest-eda.dense.md` § 4 — D1-D10 feature 候補詳細
+- `~/projects/kaggle/CLAUDE.md` § 4 — 4 paradigm 強制ルール (= 3+ paradigm mix 必須)
+
+### 5.6 出力 deliverables (= 次タスクの想定)
+
+- `.criteria/kaggle-rogii-winning-candidates-cv-test-2026-05-12.yaml`
+- 各候補に対する exp ブランチ + smoke + OOF (= 最良 CV で測定)
+- `docs/dev/2026-05-12-winning-candidates-cv-results.md` (= 候補 5 つの CV 改善実測)
+- 「優勝路手法 確定」 宣言 (= 最も CV 改善幅大きい 1-2 候補を submit 路線として確定)
+
+---
