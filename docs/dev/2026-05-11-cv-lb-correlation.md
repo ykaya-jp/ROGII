@@ -66,6 +66,22 @@ C1 fold sizes: 140 (fold 0 = pseudo-test), 159/158/158/158 (其他)
 3. **C1 fold 0 OOF RMSE は LB-proxy として valuable** (= 140 wells が test 類似)。 ただし他 fold の OOF は「典型的 train wells」 で LB-proxy ではない。 全 OOF を pool した overall RMSE は valid だが、 fold 0 単独 を LB proxy として併記すべき。
 4. **C4 単独は F1 偏在で risky** (= b_cluster balance p < 0.05)。 C4 を採用するなら必ず b_cluster post-hoc audit を併記。
 
+### 1.4 F-D2 fix 検証 (= 2026-05-11 二度目 build_fold_parquets で実測)
+
+C2 default を **3-key 版** (= visible_ratio × tw_gr_resid_std × **b_ANCC_med**、 計 5 × 4 × 3 = 60 stratum) に変更し、 chi-square p_value で b_cluster balance を再計測:
+
+| CV | b_cluster balance p_value | 含意 |
+|---|---:|---|
+| C4 (= typewell hash GroupKFold 単独) | **0.0424** | 5% 有意で偏在 (= F-D2、 修正前と同) |
+| **C2.v2 (= 3-key、 b_ANCC_med 軸追加)** | **0.2102** | **5% 有意水準を越え balanced**、 約 5× 改善 |
+
+= **F-D2 finding (= 「C4 単体は F1 偏在 risky」) の数理的解消を確認**。 C2 default の 3-key 化は本質的な improvement、 単に bin 数を増やしただけではなく b_cluster axis を直接 stratify した効果。
+
+含意:
+- **C2 vs C4 は b_cluster balance で C2 (v2) が明確に優位**
+- 次の base re-train + correlation 測定で C2 が LB Spearman でも上位の可能性高い
+- C4 単独採用は推奨しない (= F1 偏在 risk 維持)、 C4 を使うなら必ず b_cluster post-hoc audit 併記
+
 ---
 
 ## 2. Phase 2.1 = 各 SCORED の base re-train + OOF 再生成

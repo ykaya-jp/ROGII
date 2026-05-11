@@ -133,19 +133,49 @@ def main(out_dir: Path, seed: int, n_splits: int) -> None:
     else:
         print(f"  [C1] high-order parquet not found at {HIGH_ORDER_PATH} — skipping C1")
 
-    # ────────── C2 — multi-key stratified Edge Q ──────────
-    fold_id_c2, groups_c2 = build_multi_key_stratified_edge_q_folds(
-        train_df, TRAIN_DIR, stats,
-        stratify_specs=[
+    # ────────── C2 — multi-key stratified Edge Q (3-key version, addresses F-D2) ──────────
+    # F-D2 finding (= C4 b_cluster balance p=0.0424 で 5% 有意偏在) に対応:
+    # default stratify_specs を 3-key 化、 b_ANCC_med を quantile bin で直接 stratify。
+    # b_cluster 値は b-cluster-xy.parquet にあるので、 stats に merge してから渡す。
+    stats_for_c2 = stats.copy()
+    if B_CLUSTER_PATH.exists():
+        bdf = (
+            pd.read_parquet(B_CLUSTER_PATH)[["well_id", "b_ANCC_med"]]
+            .drop_duplicates(subset=["well_id"])
+        )
+        bdf["well_id"] = bdf["well_id"].astype(str)
+        stats_for_c2["well_id"] = stats_for_c2["well_id"].astype(str)
+        stats_for_c2 = stats_for_c2.merge(bdf, on="well_id", how="left")
+        c2_specs = [
             ("visible_ratio",   "quantile", 5),
             ("tw_gr_resid_std", "quantile", 4),
-        ],
+            ("b_ANCC_med",      "quantile", 3),
+        ]
+        print(f"  [C2] using 3-key specs (= visible_ratio × tw_gr_resid_std × b_ANCC_med = 60 stratum)")
+    else:
+        c2_specs = [
+            ("visible_ratio",   "quantile", 5),
+            ("tw_gr_resid_std", "quantile", 4),
+        ]
+        print(f"  [C2] b-cluster-xy not found → falling back to 2-key specs (legacy)")
+    fold_id_c2, groups_c2 = build_multi_key_stratified_edge_q_folds(
+        train_df, TRAIN_DIR, stats_for_c2,
+        stratify_specs=c2_specs,
         n_splits=n_splits, seed=seed,
     )
     ok, msg = verify_edge_q_no_leak(fold_id_c2, groups_c2)
     print(f"  [C2] {msg}")
     assert ok, f"C2 leak: {msg}"
-    summary.append(_save_fold(train_df["well"].values, fold_id_c2, out_dir / "C2.parquet", "C2"))
+    s2 = _save_fold(train_df["well"].values, fold_id_c2, out_dir / "C2.parquet", "C2")
+    s2["stratify_specs"] = [list(t) for t in c2_specs]
+    # post-hoc b_cluster balance audit for C2 (= F-D2 fix の verification)
+    if B_CLUSTER_PATH.exists():
+        b_lookup = dict(zip(bdf["well_id"], bdf["b_ANCC_med"]))
+        pivot_c2, p_c2 = compute_b_cluster_balance(fold_id_c2, train_df, b_lookup)
+        s2["b_cluster_balance_p_value"] = p_c2
+        print(f"  [C2] b_cluster balance chi-square p_value = {p_c2:.4f} "
+              f"(target > 0.05 = no significant imbalance; cf. C4 = 0.0424)")
+    summary.append(s2)
 
     # ────────── C3 — adversarial validation drop on top of baseline ──────────
     print(f"  [C3] fitting adversarial classifier...")

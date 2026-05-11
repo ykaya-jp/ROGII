@@ -21,15 +21,15 @@
     "n_wells": 773,
     "n_dropped": 0,
     "fold_sizes": {
-      "0": 140,
+      "0": 141,
       "1": 159,
-      "2": 158,
-      "3": 158,
-      "4": 158
+      "2": 159,
+      "3": 157,
+      "4": 157
     },
-    "fold_size_min": 140,
+    "fold_size_min": 141,
     "fold_size_max": 159,
-    "fold_size_max_over_min": 1.1357142857142857
+    "fold_size_max_over_min": 1.127659574468085
   },
   {
     "cv": "C2",
@@ -37,15 +37,33 @@
     "n_wells": 773,
     "n_dropped": 0,
     "fold_sizes": {
-      "0": 161,
-      "1": 155,
-      "2": 152,
+      "0": 155,
+      "1": 163,
+      "2": 151,
       "3": 152,
-      "4": 153
+      "4": 152
     },
-    "fold_size_min": 152,
-    "fold_size_max": 161,
-    "fold_size_max_over_min": 1.0592105263157894
+    "fold_size_min": 151,
+    "fold_size_max": 163,
+    "fold_size_max_over_min": 1.0794701986754967,
+    "stratify_specs": [
+      [
+        "visible_ratio",
+        "quantile",
+        5
+      ],
+      [
+        "tw_gr_resid_std",
+        "quantile",
+        4
+      ],
+      [
+        "b_ANCC_med",
+        "quantile",
+        3
+      ]
+    ],
+    "b_cluster_balance_p_value": 0.21015447922461256
   },
   {
     "cv": "C3",
