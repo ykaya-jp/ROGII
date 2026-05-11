@@ -31,6 +31,7 @@ dependencies = [
     "tsfresh>=0.21",
     "prophet>=1.1",
     "rich>=15.0.0",
+    "numba>=0.59",
 ]
 
 [project.optional-dependencies]
