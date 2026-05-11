@@ -68,14 +68,54 @@ C1 fold sizes: 140 (fold 0 = pseudo-test), 159/158/158/158 (其他)
 
 ---
 
-## 2. Phase 2.1 = 各 SCORED の base re-train + OOF 再生成 (= 未着手)
+## 2. Phase 2.1 = 各 SCORED の base re-train + OOF 再生成
 
-### 2.1 残作業
+### 2.1.a kernel patch (= **完了**)
 
-1. **kernel patch**: 各 SCORED kernel (= kaggle_kernels/expN/expN.py) に `FOLD_OVERRIDE_PARQUET` env var を読む logic を inject (= 5-10 行/kernel × 9 kernel)
-2. **scripts/regenerate_oof.py**: 各 SCORED に対し `FOLD_OVERRIDE_PARQUET=outputs/folds/<cv>.parquet` で kernel を invoke、 OOF を `outputs/oof/cv-lb-correlation/{exp}_{cv}.parquet` に保存
-3. **compute**: karnakbaev pretrained re-fit が 1 fold あたり 30+ min × 5 fold × 5 CV × 9 SCORED = 80-100 hr local CPU、 Colab/Kaggle Notebook 4-server 並列で wall clock 20-30 hr
-4. **tools/measure_cv_lb_correlation.py**: Spearman/Pearson/LOO/bootstrap CI を計算
+build_edge_q_folds (+ exp010 の build_stratified_edge_q_folds) の冒頭に env var `FOLD_OVERRIDE_PARQUET` から fold partition を読む hook を注入:
+
+- ✓ `kaggle_kernels/exp007_edge_q_m/exp007_edge_q_m.py`
+- ✓ `kaggle_kernels/exp008_case_d_kalman/exp008_case_d_kalman.py` (= v2 と v3 共用)
+- ✓ `kaggle_kernels/exp009_case_e_edge_o/exp009_case_e_edge_o.py`
+- ✓ `kaggle_kernels/exp010_fold_reform/exp010_fold_reform.py` (= 両 fold fn + helper)
+- 未: exp002_lgb / exp003_lgb / exp005_cache_blend / exp006_tabicl_pflite (= karnakbaev only や baseline)。 これらは別 task で対応。
+
+### 2.1.b OOF 再生成 pipeline (= **完了**)
+
+`scripts/regenerate_oof.py` 新規 = (exp, cv) ペアごとに:
+1. kernel script に CV strategy 冒頭 inject (= `FOLD_OVERRIDE_PARQUET=/kaggle/input/rogii-cv-fold-overrides/{cv}.parquet`)
+2. kernel-metadata.json を patch (= id/title 変更 + dataset_sources に fold dataset 追加)
+3. `kaggle kernels push` で submit
+4. COMPLETE 待ち + output OOF download
+
+dry-run 動作確認済 (= patched kernel + metadata が正しく生成)。
+
+### 2.1.c 実行 (= **ユーザー手元 work**、 未完)
+
+```bash
+# 1) ローカルで fold parquet を Kaggle dataset として upload (= 一度きり)
+cd outputs/folds/ && kaggle datasets create -p . -u
+# → ky7240/rogii-cv-fold-overrides がアップロードされる
+# (= dataset slug は scripts/regenerate_oof.py の DEFAULT_FOLD_DATASET と一致)
+
+# 2) 全 20 kernel (= 4 exp × 5 cv) を kaggle に push、 完走待機
+.venv/bin/python scripts/regenerate_oof.py --all
+
+# もしくは parallel push (= Kaggle 側で queue に並ぶ、 wall clock 短縮)
+.venv/bin/python scripts/regenerate_oof.py --all --parallel-push
+```
+
+compute: 1 kernel ≈ 30-60 min Kaggle GPU、 20 kernel sequential で 10-20 hr、 parallel で wall 1-2 hr (= Kaggle scoring queue 依存)。
+
+### 2.1.d aggregate (= **未着手**)
+
+`scripts/regenerate_oof.py` が生成する `outputs/oof/cv-lb-correlation/<exp>__cv-<cv>/submission.csv` 群を集約して `oof_table.parquet` (= AC-5) にまとめる集約 script を別途。
+
+### 2.1.e correlation 計算 (= **未着手**)
+
+`tools/measure_cv_lb_correlation.py` で Spearman/Pearson/LOO 平均/bootstrap 95% CI を計算。 AC-6 + AC-7 達成。
+
+注: 本タスクで OOF を取得できるのは self-base 4 kernel (= exp007 / exp008 v2 / exp009 v2 / exp010) のみ。 karnakbaev only の exp005 系 + exp006 は published OOF を流用しているため、 「真の OOF 再生成」 は karnakbaev pretrained を fold-aware に re-fit する別 pipeline が必要 (= 別 task に分離)。 結果として correlation 計算は n=2-4 (= exp007 + exp008 v2 + exp009 v2 SCORED 後 + exp010 SCORED 後) で実施。
 
 ### 2.2 SCORED + PENDING
 

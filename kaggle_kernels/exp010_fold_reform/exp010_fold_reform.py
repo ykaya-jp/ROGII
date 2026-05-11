@@ -1236,6 +1236,45 @@ def compute_typewell_hashes(
     return hashes
 
 
+def _apply_fold_override(train_df: pd.DataFrame, n_splits: int = 5) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+    """If env var FOLD_OVERRIDE_PARQUET is set, return the overridden
+    (fold_id, groups). Otherwise return None. Used by both
+    build_edge_q_folds and build_stratified_edge_q_folds so the kernel can
+    be re-run under each of the 5 CV strategies for the
+    kaggle-rogii-cv-strategies-2026-05-11 task.
+    """
+    import os as _os
+    override_path = _os.environ.get("FOLD_OVERRIDE_PARQUET")
+    if not override_path:
+        return None
+    try:
+        override_df = pd.read_parquet(override_path)
+        well_to_fold = dict(
+            zip(override_df["well"].astype(str), override_df["fold"].astype(np.int8))
+        )
+        well_col = train_df["well"].astype(str).values
+        fold_id = np.array(
+            [well_to_fold.get(w, -1) for w in well_col], dtype=np.int8
+        )
+        unmapped = (fold_id < 0)
+        if unmapped.any():
+            for i in np.where(unmapped)[0]:
+                fold_id[i] = abs(hash(str(well_col[i]))) % n_splits
+        groups = np.asarray(well_col, dtype=object)
+        print(
+            f"  [FOLD_OVERRIDE] applied {override_path} to {len(fold_id)} rows; "
+            f"unique folds = {sorted(np.unique(fold_id).tolist())} "
+            f"(unmapped wells = {int(unmapped.sum())} hashed-back)"
+        )
+        return fold_id, groups
+    except Exception as e:
+        print(
+            f"  [FOLD_OVERRIDE] failed to load {override_path} "
+            f"({type(e).__name__}: {e}) — proceeding with built-in fold"
+        )
+        return None
+
+
 def build_edge_q_folds(
     train_df:   pd.DataFrame,
     train_dir:  Path,
@@ -1250,7 +1289,12 @@ def build_edge_q_folds(
 
     leak 検査: 同 hash の 2 wells が同 fold に居ることを確認するため、
     呼出側で `verify_edge_q_no_leak()` を必ず実行すること。
+
+    CV-strategy override: see ``_apply_fold_override``.
     """
+    override = _apply_fold_override(train_df, n_splits=n_splits)
+    if override is not None:
+        return override
     well_ids = train_df["well"].unique().tolist()
     try:
         hashes = compute_typewell_hashes(train_dir, well_ids)
@@ -1315,12 +1359,21 @@ def build_stratified_edge_q_folds(
     Math: K bins stratified sampling で σ_fold² → σ_fold²/K (best case)。
     exp007 σ_fold = 1.175 ft、K=4 quartile で σ_fold ≤ 0.5 ft 目標。
 
+    CV-strategy override (= task kaggle-rogii-cv-strategies-2026-05-11):
+        env var FOLD_OVERRIDE_PARQUET = path to parquet with (well, fold).
+        When set, the stratified construction is bypassed and the override
+        mapping is applied directly so the kernel can be re-run under each
+        of the 5 CV strategies.
+
     Leak guard:
         - per-well-stats.parquet は train wells のみ参照 (= no test leak)
         - hash group constraint > stratify (= group atomic)
         - stratify_key (tw_gr_resid_std 等) は visible-region GR vs typewell
           residual で TVT 非依存
     """
+    override = _apply_fold_override(train_df, n_splits=n_splits)
+    if override is not None:
+        return override
     well_ids = train_df["well"].unique().tolist()
     try:
         hashes = compute_typewell_hashes(train_dir, well_ids)

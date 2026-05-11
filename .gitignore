@@ -249,3 +249,6 @@ _research_kernels/
 
 # CatBoost training artifacts (auto-generated during fit, not commit-worthy)
 catboost_info/
+
+# scripts/regenerate_oof.py temp working copies (= patched kernels for push)
+.work/

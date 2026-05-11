@@ -973,7 +973,46 @@ def build_edge_q_folds(
 
     leak 検査: 同 hash の 2 wells が同 fold に居ることを確認するため、
     呼出側で `verify_edge_q_no_leak()` を必ず実行すること。
+
+    CV-strategy override (= task kaggle-rogii-cv-strategies-2026-05-11):
+        env var FOLD_OVERRIDE_PARQUET = path to parquet with (well, fold)
+        columns. When set, this function ignores the typewell-hash fold
+        construction entirely and applies the override mapping. Used by
+        scripts/regenerate_oof.py to re-run the kernel under each of the
+        5 CV strategies (baseline / C1 / C2 / C3 / C4) without modifying
+        the model / feature code.
     """
+    import os as _os
+    override_path = _os.environ.get("FOLD_OVERRIDE_PARQUET")
+    if override_path:
+        try:
+            override_df = pd.read_parquet(override_path)
+            well_to_fold = dict(
+                zip(override_df["well"].astype(str), override_df["fold"].astype(np.int8))
+            )
+            well_col = train_df["well"].astype(str).values
+            fold_id = np.array(
+                [well_to_fold.get(w, -1) for w in well_col], dtype=np.int8
+            )
+            # Wells without an override mapping fall back to deterministic hash
+            unmapped = (fold_id < 0)
+            if unmapped.any():
+                for i in np.where(unmapped)[0]:
+                    fold_id[i] = abs(hash(str(well_col[i]))) % n_splits
+            # groups = well_id so verify_edge_q_no_leak still passes
+            groups = np.asarray(well_col, dtype=object)
+            print(
+                f"  [FOLD_OVERRIDE] applied {override_path} to {len(fold_id)} rows; "
+                f"unique folds = {sorted(np.unique(fold_id).tolist())} "
+                f"(unmapped wells = {int(unmapped.sum())} hashed-back)"
+            )
+            return fold_id, groups
+        except Exception as e:
+            print(
+                f"  [FOLD_OVERRIDE] failed to load {override_path} "
+                f"({type(e).__name__}: {e}) — proceeding with built-in Edge Q"
+            )
+
     well_ids = train_df["well"].unique().tolist()
     try:
         hashes = compute_typewell_hashes(train_dir, well_ids)
