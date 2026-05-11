@@ -107,3 +107,72 @@ class FormationPlaneKNN:
             pred[nofit] = self.fa.mean(0).astype(np.float32)
         min_dist = np.where(vk, dk, np.inf).min(1).astype(np.float32)
         return pred, min_dist
+
+
+# Dense per-well ANCC subsampler + KDTree IDW — used by exp004 (= Approach A).
+# Inspired by romantamrazov/rogii-super-solution-lb-top-3 lines 364-394 (Apache 2.0).
+DENSE_SPW = 60
+DENSE_K = 20
+
+
+class DenseANCCImputer:
+    """KDTree + IDW over uniformly-subsampled per-well ANCC points.
+
+    Self-exclusion enforced: when `self_wid` is passed, all points belonging
+    to that well are masked to inf before top-K selection.
+    """
+
+    def __init__(self, train_dir: Path, spw: int = DENSE_SPW):
+        xs: list[np.ndarray] = []
+        ys: list[np.ndarray] = []
+        anccs: list[np.ndarray] = []
+        wids: list[str] = []
+        for p in sorted(Path(train_dir).glob("*__horizontal_well.csv")):
+            wid = p.stem.replace("__horizontal_well", "")
+            try:
+                df = pd.read_csv(p, usecols=["X", "Y", "ANCC"]).dropna()
+            except Exception:
+                continue
+            if len(df) == 0:
+                continue
+            ix = np.linspace(0, len(df) - 1, min(spw, len(df)), dtype=int)
+            s = df.iloc[ix]
+            xs.append(s["X"].values)
+            ys.append(s["Y"].values)
+            anccs.append(s["ANCC"].values)
+            wids.extend([wid] * len(s))
+        self.xy = np.column_stack([np.concatenate(xs), np.concatenate(ys)])
+        self.ancc = np.concatenate(anccs).astype(np.float32)
+        self.wids = np.array(wids)
+        self.scale = np.where(self.xy.std(0) < 1e-3, 1.0, self.xy.std(0))
+        self.tree = cKDTree(self.xy / self.scale)
+
+    def impute(
+        self,
+        xy_q: np.ndarray,
+        self_wid: str | None = None,
+        k: int = DENSE_K,
+        nfetch: int = 3000,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        xy_q = np.atleast_2d(xy_q).astype(np.float64)
+        q = xy_q / self.scale
+        nf = min(nfetch, len(self.ancc))
+        dist, idx = self.tree.query(q, k=nf, workers=-1)
+        if self_wid:
+            dist = np.where(self.wids[idx] == self_wid, np.inf, dist)
+        ord_ = np.argpartition(dist, min(k - 1, nf - 1), 1)[:, :k]
+        dk = np.take_along_axis(dist, ord_, 1)
+        ik = np.take_along_axis(idx, ord_, 1)
+        vk = np.isfinite(dk)
+        w = np.where(vk, 1.0 / (dk + 1e-3), 0.0)
+        sw = w.sum(1)
+        safe = np.where(sw < 1e-9, 1.0, sw)
+        an = self.ancc[ik]
+        ap = (an * w).sum(1) / safe
+        ap = np.where(sw < 1e-9, float(self.ancc.mean()), ap)
+        var = ((an - ap[:, None]) ** 2 * w).sum(1) / safe
+        return (
+            ap.astype(np.float32),
+            np.sqrt(np.maximum(var, 0.0)).astype(np.float32),
+            np.where(vk, dk, np.inf).min(1).astype(np.float32),
+        )
