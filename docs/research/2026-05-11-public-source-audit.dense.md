@@ -74,6 +74,73 @@ worst = diff.sort_values("abs_err", ascending=False).head(100)
 
 ---
 
+### 1.2 `buchananliang/rogii-karnak-top2-public-artefacts` (6.6 MB、 5/8 公開)
+
+**内容**:
+- `final_lgb.txt` (8.6 MB) — trained LightGBM model
+- `final_xgb.json` (8.6 MB) — trained XGBoost model
+- `final_cb.cbm` (1.95 MB) — trained CatBoost model
+- `features.json` (1.7 KB) — 101 feature names list
+- `ensemble_weights.json` (74 bytes) — `{"lgb": 0.0, "xgb": 0.473, "cb": 0.527}`
+
+**features 構成 (= 101 cols)**:
+- 基本: last_known_tvt, known/hidden_len, frac_hidden, md, z, dx/dy/dz, dist_xy/xyz
+- GR: gr_roll{3,5,11,21,51,151}, gr_std{5,21}, gr_min/max{5,21}, gr_range{5,21}, gr_grad, gr_lag/lead{1,5,10}
+- typewell: prefix_tw_rmse/mae/bias, tw_gr_at_last, tw_gr_std_local, tw_tvt_range
+- **Beam (Top2 独自)**: beam_{tight,cons,loose,vloose}_delta + beam_mean/std/spread/gap
+- **PF (Top2 独自)**: pf_delta, pf_std, pf_beam_cons_diff, pf_beam_loose_diff
+- **ANCC (Top2 独自)**: ancc_delta, ancc_std, ancc_beam_cons_diff, ancc_pf_diff
+- **tw_diff at 13 offsets**: -120/-80/-40/-20/-10/-5/0/+5/+10/+20/+40/+80/+120
+
+**判定**:
+- ✓ **paradigm 2 流用候補** (= trained XGB + CB artifacts = 数理本質を理解可能、 「他の人がやってないが理論で優位」 ではないが diversity ある base 追加候補)
+- ❌ LGB は ensemble weight = 0 で drop されている (= Top2 解法でも LGB 単独は劣化 contribution = 同 paradigm の LGB×3 を使う karnakbaev とは別の learning signal の可能性)
+- ✓ **features.json は我々の自前 4 base 165 features の subset baseline として valuable** (= 我々が「追加で増やしている 64 features」 が本質的に lift しているか ablation 可能)
+
+**統合 sketch**:
+```python
+# kaggle_kernels に load
+import lightgbm as lgb
+import xgboost as xgb
+import catboost as cb
+
+top2_xgb = xgb.Booster()
+top2_xgb.load_model("/kaggle/input/rogii-karnak-top2-public-artefacts/final_xgb.json")
+top2_cb = cb.CatBoostRegressor().load_model("/kaggle/input/rogii-karnak-top2-public-artefacts/final_cb.cbm")
+
+# 我々の features (= 165 cols) から top2 features (= 101 cols) を抽出して predict
+top2_xgb_pred = top2_xgb.predict(X[top2_features])
+top2_cb_pred = top2_cb.predict(X[top2_features])
+top2_ensemble = 0.473 * top2_xgb_pred + 0.527 * top2_cb_pred
+
+# 既存 9-base Ridge meta に 10 番目 base として追加
+Sx = np.column_stack([... 9 base ..., top2_ensemble])
+```
+
+期待 LB lift: **-0.05 〜 -0.2 ft** (= 同 paradigm GBM diversity だが Top2 LB 値次第)。 ただし Top2 解法 (= LB ?) と我々 (= LB 9.957) が同帯なら lift 限定的、 Top2 LB 9.0-9.5 帯なら有意な lift 可能。
+
+→ Top2 LB 値の確認が前提。 kaggle competition で「buchananliang」 author の submission score を leaderboard で探す必要。
+
+**LB 値確認 (= 2026-05-11 実測)**:
+
+| 項目 | 値 |
+|---|---:|
+| **Buchan Liang (= dataset author)** | **rank 205/779, LB 10.463** |
+| 我々 Reexel | rank 53/779, LB 9.957 |
+| 差 | **+0.506 ft (= Top2 author の方が悪い)** |
+
+**修正 判定** (= 数理本質):
+- dataset 名「karnak-top2」 は誤解を招く。 karnakbaev (= ROGII Top2 解法 LB 10.78、 別 dataset で公開) ではなく、 **Buchan Liang 自身の LB 10.463 解法 trained artifacts**
+- 我々 9.957 より +0.5 ft 悪い model を加えても LB lift は期待薄 (= diminishing returns、 同 paradigm GBM の subset version)
+- ❌ **採用不要** = 優勝本質性 §11.1 で「他人解法、 しかも下位」 = 数理本質弱い
+
+ただし **features.json (= 101 features list)** は valuable diagnostic:
+- 我々自前 4 base 165 features の **subset baseline** 確認に有用
+- 「我々が増やした 64 features (= 165 - 101) は本当に LB lift しているか」 を ablation 可能
+- これは **feature ablation 用** に保持 (= base model artifacts は使わない)
+
+---
+
 ## 2. 未 audit dataset (= 次タスクで個別 audit)
 
 | dataset | size | last update | 推測内容 | audit priority |
