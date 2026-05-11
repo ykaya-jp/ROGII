@@ -83,6 +83,25 @@ PENDING (= 5/11 0:13, 0:32 submitted): exp005 v2 (= Edge S 単独), exp005 v3 (=
 
 ## 2. 悪化した sub × 3
 
+### 2.0 🚨 exp005 v3 = +0.184 悪化 (= **Edge R 失敗、2026-05-11 SCORED**)
+
+| 階層 | hypothesis | verified? |
+|---|---|---|
+| 直接因 | **H-R1 base model 依存性** = 公開 698002 raw LGB tysig vs 我々 karnakbaev pretrained 5-base + Ridge blend、Edge R train (300 row) が karnakbaev 最適 weight 配分を破壊 | ✅ likely (= base 構造異なる確認) |
+| 間接因 | **H-R2 w_R = 0.5 過大** = online と base 等重みで base 精度を半分犠牲 | ✅ likely (= diff abs mean 0.177 で predict 変化) |
+| メタ因 | **H-R3 augmentation 不足** = visible 300 row × 3 wells で fine-tune overfit | partial |
+| メタ因 | **pane 2 提案を公開実測値で blind 信用、AB test なしで full inject** | ✅ verified (= 教訓化済) |
+
+kernel log で **実装 100% 動作確認** (= visible dataset shape (300, 161)、LGB 3 base continued training 全 success、w_R 0.5 applied)。
+
+#### 次への反映
+- ✅ **5/12 plan で Edge R 除外** (= exp011 = exp010 + Edge S のみ)
+- ⚠️ **exp014b で w_R=0.15 AB test** (= H-R2 verify、optional)
+- ✅ **exp009 v4 (= subagent U の v3 + Edge R) push 中止**
+- ✅ **横断 pattern refute**: 「公開実測値 Edge R -0.37 を信用」 path → refute、**全 文献 hack を AB test 必須化**
+
+---
+
 ### 2.1 exp003 = +2.815 悪化 (= **最大失敗**)
 
 #### root cause 分析
