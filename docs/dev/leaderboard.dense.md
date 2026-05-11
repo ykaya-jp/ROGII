@@ -196,3 +196,36 @@ Kaggle 規定: **5 submissions per day** (UTC reset 00:00)。
 |---|---|---|
 | 2026-05-10 | 4 (exp002 + exp003 + exp005 + exp006) | 1 残 |
 | 2026-05-11 | 0 | 5 残 (exp007 + 検証 sub に投入予定) |
+
+## 🚨 LB 動向認識改め (= 2026-05-11 02:30 UTC、ユーザー指示)
+
+24h で競合改善:
+
+| 順位 | 5/10 旧 | **5/11 02:30 UTC 現** | delta |
+|---|---|---|---|
+| **Top 1 Virtute** | 9.256 | **9.132** | **-0.124** ⚠️ |
+| Top 2 Silogram | 9.301 | 9.301 | 0 |
+| **Top 4 賞金 cutoff anshul3501** | 9.415 | **9.374** | **-0.041** |
+| Top 5 Takahiro Saito | 9.584 | 9.498 | -0.086 |
+| Top 20 Gold cutoff | spbforce 9.919 | Alhasan Abdellatif **9.865** | -0.054 |
+
+### 改善必要量 (= 我々の現状 best LB 10.203 から)
+
+| target | 必要 |
+|---|---|
+| Top 20 Gold | **-0.338 ft** |
+| Top 4 賞金圏 | **-0.829 ft** |
+| **Top 1 (現 9.132)** | **-1.071 ft** |
+| 安全 Top 1 (= 残 86 日で 8.5 想定) | **-1.7 ft** |
+| private 安全圏 8.0-8.5 | **-1.7〜-2.2 ft** |
+
+### verified data からの conservative 評価
+
+| case | 累積改善 | LB | 順位 |
+|---|---|---|---|
+| best (= 全 layer 上限) | -2.5 | 7.7 | Top 1 圏 |
+| mid (= 50%) | -1.4 | 8.8 | Top 10 |
+| **conservative (= 下限 + Edge R failure)** | **-0.4** | **9.8** | **Gold ぎりぎり** |
+| worst (= 案 D/E 悪化) | +0.2 | 10.4 | 圏外 |
+
+→ **Edge R verified failure + 自前 4 base verified failure** で信頼性 hit、**conservative case = Gold 確保もぎりぎり**。**AB ablation 厳格化 + safe path 維持が必須**。
