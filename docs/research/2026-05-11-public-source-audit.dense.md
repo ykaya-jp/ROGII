@@ -74,6 +74,74 @@ worst = diff.sort_values("abs_err", ascending=False).head(100)
 
 ---
 
+### 1.4 `nina2025/rogii-03` (495 KB、 5/11 公開) — ★ **超 valuable**
+
+**内容**:
+- `9.956.csv` (464 KB) — **LB 9.956 submission** (= 我々 9.957 と same band!)
+- `10.142.csv` (464 KB) — LB 10.142
+- `11.284.csv` (424 KB) — LB 11.284
+- `11.338.csv` (463 KB) — LB 11.338
+- author F.A.Nina = rank 147/779, **LB 10.252** (= 個人 LB は 10.25 帯、 ただし 4 sub を ascending で公開)
+
+**判定 = ★ ensemble blend 候補**:
+- ❌ akshankrithick / buchananliang / alfaxa とは違って **9.956.csv が我々 9.957 と same band**
+- ✅ **paradigm 1 (= submission only) だが 数理本質 OK**:
+  * 我々 exp008 v2 (= karnakbaev + 自前 4 base + 案 D Kalman + Edge S)
+  * nina 9.956 (= 別 path、 詳細不明だが LB 同帯)
+  * = 2 解法の **error 分布が独立** ならば ensemble で MSE 半減効果 (= classical Bagging theorem)
+- 期待 LB lift: **-0.05 〜 -0.3 ft** (= rank average of independent errors)
+- これは「他の人がやってないが理論で優位」 (= 優勝本質性 §11.1 ✅) = ensemble theorem に基づく数理本質
+
+**simple blend sketch**:
+```python
+ours = pd.read_csv("submissions/exp008_v2.csv")  # LB 9.957
+nina = pd.read_csv(".work/source_audit/nina-03/9.956.csv")  # LB 9.956
+merged = ours.merge(nina, on="id", suffixes=("_ours", "_nina"))
+# simple average
+blend = (merged["tvt_ours"] + merged["tvt_nina"]) / 2
+# rank average (= more robust for non-aligned distributions)
+rank_blend = (merged["tvt_ours"].rank() + merged["tvt_nina"].rank()) / 2
+```
+
+これは **1 submit quota で試せる軽量 try** = LB 0.05-0.3 ft lift 可能性で submit 価値高い。 ただし「他人 submission の blend」 paradigm = 優勝路として弱い (= self-compile では無い) → **本タスク完了後の安全 sub の 1 候補** に整理。
+
+**注意**:
+- nina の 4 sub (= 9.956 + 10.142 + 11.284 + 11.338) の **submission date がすべて 5/11 06:19** = 同時公開 (= 同 dataset 内に複数 LB 帯の sub を投下、 おそらく ensembling 用素材として公開した意図)
+- 9.956 < 10.142 < 11.284 < 11.338 = 改善 history (= 同 author の自前 LB progression、 model architecture 進化の trace)
+- 4 sub を **rank-based ensemble** で blend すれば single-author の variance reduction (= 我々の lift より limited、 nina 自身が既に best 9.956 を出してる)
+
+→ **9.956.csv のみを我々と blend** が最適 path (= other 3 sub は弱いので avoid)
+
+**diversity 実測 (= 2026-05-11)**:
+
+我々 exp008 v2 (= LB 9.957) と nina 9.956 を per-row 比較:
+
+| metric | 値 |
+|---|---:|
+| **correlation** | **0.999923** |
+| abs diff mean | 2.89 ft |
+| abs diff p50 | 1.71 ft |
+| abs diff p90 | 7.81 ft |
+| abs diff max | 13.41 ft |
+
+= **correlation 0.9999 (ほぼ完全 correlated)**。 ensemble variance reduction:
+$$\sigma_{\text{blend}}^2 = \frac{\sigma_1^2 + \sigma_2^2 + 2\rho \sigma_1 \sigma_2}{4}$$
+ρ = 0.9999、 σ_1 ≈ σ_2 とすれば σ_blend² ≈ σ² (= **benefit ほぼゼロ**)。
+
+**修正 判定**:
+- ❌ **採用不要** = correlation 0.9999 で blend benefit limited
+- ただし **重要 diagnostic**:
+  * 「LB 9.95-9.96 帯の 2 解法は ほぼ同 prediction」 = この帯は **local optimum neighborhood**
+  * 真の lift には **architecture change** (= NN sequence A / MoE D / 別 paradigm E) が必須
+  * = winning path A/D の direction を data evidence で支持
+
+**整理**:
+- abs diff mean 2.89 ft は **Top10 vs 我々の delta (= 2.83 ft) とほぼ同帯**
+- 同 LB band 解法間の delta は ROGII の hidden ground truth から見た「予測ばらつき」 の lower bound に近い (= 9.95 帯は近似 best、 個別 row では 2-3 ft 揺れる)
+- = **真の LB 8.x 帯到達には per-row error 構造の根本的変更** (= MoE for minority cluster) が必要
+
+---
+
 ### 1.3 `alfaxadeyembe/rogii-lgbm-model-artifacts` (1.2 MB、 5/9 公開)
 
 **内容**:
