@@ -391,12 +391,15 @@ def compute_test_distance_features(
 
     Xtr = train_features[feature_cols].copy()
     Xte = test_features[feature_cols].copy()
-
-    # Z-score on train stats (= robust = median + 1.4826*MAD-like, but stick
-    # to plain mean/std for tractability; fill NaN with col median).
-    medians = Xtr.median(numeric_only=True)
-    Xtr = Xtr.fillna(medians)
-    Xte = Xte.fillna(medians)
+    # Coerce any non-numeric residue (= a column that survives the dtype
+    # filter via mixed dtype) to numeric, replacing failures with NaN, then
+    # impute NaNs with column median (train-derived) before z-scoring.
+    for col in feature_cols:
+        Xtr[col] = pd.to_numeric(Xtr[col], errors="coerce")
+        Xte[col] = pd.to_numeric(Xte[col], errors="coerce")
+    medians = Xtr.median()
+    Xtr = Xtr.fillna(medians).fillna(0.0)
+    Xte = Xte.fillna(medians).fillna(0.0)
     mu = Xtr.mean()
     sigma = Xtr.std().replace(0.0, 1.0)  # zero-variance cols → no scaling
     Xtr_z = (Xtr - mu) / sigma

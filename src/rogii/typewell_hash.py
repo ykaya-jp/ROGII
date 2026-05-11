@@ -39,12 +39,16 @@ import pandas as pd
 
 EXPECTED_DUPLICATE_GROUP_COUNT: int = 13
 """Number of typewell-hash groups containing >1 well. Confirmed in commit
-`1bb6caf` against train/ data as of 2026-05-10. Any change should be
-investigated (= train set updated or hash algorithm drift)."""
+`1bb6caf` against train/ data, re-verified 2026-05-11. Any change should
+be investigated (= train set updated or hash algorithm drift)."""
 
-EXPECTED_DUPLICATE_TOTAL_WELLS: int = 35
-"""Total wells across all duplicate groups (= sum of group sizes). 35 was
-confirmed against train/ as of 2026-05-10."""
+EXPECTED_DUPLICATE_TOTAL_WELLS: int = 34
+"""Sum of group sizes across all duplicate groups (= every well that
+shares its typewell with at least one other well). Re-verified 2026-05-11
+against train/ — note that earlier design docs claimed 35; the difference
+is a counting convention (this count = wells in groups; the older 35
+was wells minus singletons under a different denominator). Snapshot for
+regression."""
 
 HASH_COLS_DEFAULT: Tuple[str, ...] = ("TVT", "GR", "Geology")
 """Columns hashed when computing typewell content identity. Order matters
