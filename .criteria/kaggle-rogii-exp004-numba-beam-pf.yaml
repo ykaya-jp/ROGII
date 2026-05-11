@@ -1,0 +1,252 @@
+task_id: kaggle-rogii-exp004-numba-beam-pf
+goal: |
+  Approach A 自前再実装 = Numba JIT Beam x7 (delta +/-2) + Numba Particle Filter
+  (ANCC + Z 両方, N=500) + plane-fit imputer + Self-NCC multi-scale + LGB x3 + CB
+  を src/rogii/{beam,pf}.py + self-contained Kaggle script として構築、LB 10.5 帯
+  単独到達。
+
+  位置づけ: 9 切り戦略 (= public LB 8.x 帯到達、docs/dev/leaderboard.dense.md
+  § "9 切り戦略") の **Approach A diversity 源**。現在の Approach B (= karnakbaev
+  blend exp005 v2 = LB 10.203 Silver) と独立 stack を作り、exp012 で両 Approach の
+  全 OOF を Ridge meta blend → 9.0 帯到達を狙う。単独 LB は 10.2 (= B) より悪化する
+  可能性が高いが、それは設計通り (= diversity が目的)。
+
+  本 plan 改訂版 (2026-05-11 14:58): 個別 base model HPO + loss ablation + AG deep
+  EDA finding D1 (= b_well 67 cluster categorical encoding) を AC として追加。
+  HPO + loss ablation で base 単体性能を線形 lift、D1 で公開上位未活用の
+  differentiator を獲得。
+
+context:
+  branch: feat/phase-3-exp004-numba-beam-pf
+  parent_branch: main (= a959b29 base)
+  spec: docs/research/top3-distill.dense.md  # Beam = 1.1 / PF = 2 / leak = 8.1 / numerical = 8.2
+  schedule: docs/dev/schedule-2026-05-10.dense.md  # §0.2 exp004 row
+  amendment: docs/research/strategy-critique.dense.md  # §4.2 改修 b
+  eda_finding: docs/research/2026-05-11-deepest-eda.dense.md  # AG 547 行、D1 = b_well 67 cluster
+  inspired_by:
+    - _research_kernels/romantamrazov__rogii-super-solution-lb-top-3/rogii-super-solution-lb-top-3.py:108-144  # Numba Beam
+    - _research_kernels/romantamrazov__rogii-super-solution-lb-top-3/rogii-super-solution-lb-top-3.py:223-313  # PF
+
+deliverables:
+  - path: src/rogii/beam.py
+    purpose: Numba JIT Beam Search 7 configs (delta +/-2), self_exclusion 対応
+  - path: src/rogii/pf.py
+    purpose: Numba Particle Filter for ANCC and Z (N=500), self_exclusion 対応
+  - path: src/rogii/hpo.py
+    purpose: Optuna 100 trial HPO for LGB + CB (= lr, num_leaves, min_data_in_leaf, lambda_l1/l2, feature_fraction, bagging_fraction, CB depth, l2_leaf_reg)
+  - path: src/rogii/features_d1.py
+    purpose: AG D1 finding 適用 = b_well 67 cluster ID categorical encoding (= per-well int8 column)
+  - path: tests/test_beam.py
+    purpose: smoke test (1 well x 1 config) + leak check (self_wid 除外確認)
+  - path: tests/test_pf.py
+    purpose: smoke test + numerical stability check (lk floor, pos clip)
+  - path: tests/test_features_d1.py
+    purpose: D1 cluster encoding が test 3 wells で seen cluster 確認 (000d7d20/00e12e8b → 11373.26, 00bbac68 → 11855.20)
+  - path: kaggle_kernels/exp004_numba_beam_pf/exp004_numba_beam_pf.py
+    purpose: self-contained Kaggle script (0 から train + predict + submission.csv)
+  - path: kaggle_kernels/exp004_numba_beam_pf/kernel-metadata.json
+    purpose: kernel push 用 metadata (kernel_id ky7240/rogii-exp004-numba-beam-pf)
+  - path: experiments/exp004/notes.md
+    purpose: 実装ノート (日本語、features, CV, HPO best params, loss ablation 結果, D1 ablation, 失敗回避ログ, 残課題, 次の variants)
+  - path: pyproject.toml
+    purpose: numba + optuna を直接 dependency に追加 (uv.lock には existing)
+
+baseline:
+  - metric: lb_exp002_lgb_residual
+    value: 14.695
+    note: SCORED 確認済 (sub 52515207, 2026-05-10)
+  - metric: lb_exp003_lgb_tysig
+    value: 17.510
+    note: SCORED 確認済 (sub 52519856, 自前 features 単独路線の劇的失敗、postmortem 済)
+  - metric: lb_exp005_v1_karnakbaev_blend
+    value: 10.317
+    note: SCORED 確認済 (sub 52520314, Silver 帯入り、Approach B = karnakbaev artifact blend)
+  - metric: lb_exp005_v2_karnakbaev_plus_edgeS
+    value: 10.203
+    note: SCORED 確認済 (sub 52528539, 現 best safe baseline、Approach B + Edge S round-to-grid)
+  - metric: lb_exp005_v3_online_TTA_REFUTED
+    value: 10.501
+    note: SCORED 確認済 (sub 52528863, exp005 v2 + Edge R online TTA = +0.298 ft worse、online TTA 採用禁止)
+  - metric: lb_public_top1
+    value: 9.256
+    note: 2026-05-11 取得 (= 9 切り戦略 = LB 8.x 帯到達条件)
+  - metric: lb_public_gold_cutoff
+    value: 9.919
+    note: Top 20 cutoff (= Gold 圏 entry 条件)
+
+out_of_scope:
+  - 案 D (Kalman/PF on dTVT)             # exp008 別 plan
+  - 案 E (Bayesian GP for ANCC)         # exp009 別 plan
+  - 案 G (Per-Well MoE)                 # exp012 別 plan
+  - karnakbaev artifact blend           # exp005 別 plan
+  - TabICL stack                        # exp006 別 plan
+  - Edge R (online TTA)                 # REFUTED 確定 (= exp005 v3 +0.298 ft worse、再投入禁止)
+  - Diffusion (案 I)                    # 改修 b では採択せず
+  - Kaggle Discussions deep dive        # 別 task
+  - case F (Soft-DTW + Cross-Attn)      # 改修 b 採択せず
+  - 1D U-Net residual (案 C 由来)       # 改修 b 降格
+
+risks:
+  - Numba JIT compile 時間が cold start で長い (= 数十秒 overhead)
+    -> 対策: cache=True で AOT 化、Kaggle 上で warmup phase を 1 well で実行してから本番
+  - Numba random seed が LightGBM と miss-align で reproducibility 失う
+    -> 対策: np.random.seed(42) + numba.config.SET_SEED + LGB seed=42 を全部統一
+  - Kaggle 9 hr runtime overflow (= 776 wells x 7 beam configs x 2 PFs + HPO + ablation で計算量爆発)
+    -> 対策: time.perf_counter() で 8 hr hard timeout、超えたら early stop して既存 OOF で submit。HPO は事前 local で済ませ、kernel 内では best params を hard-code
+  - Self-NCC + Beam + PF の memory bound (= 並列で OOM)
+    -> 対策: joblib prefer='threads' (top3-distill §8.5)、RSS monitor、batch size 制御
+  - LB が CV と乖離 (= overfit)
+    -> 対策: CV-LB diff > 0.5 ft で要 rollback、postmortem skill 起動
+  - leak (= self exclusion 漏れで OOF 異常に良くなる、top3-distill §8.1 警告)
+    -> 対策: AC-2 で test_beam/test_pf に leak 検査を組み込む、self_wid=None 時のみ全 wells 参照
+  - numerical instability (= linalg.solve 特異 / PF particle 全死、top3-distill §8.2)
+    -> 対策: AC-12 reviewer rubric に明記、except 内 pinv fallback 必須
+  - subagent kill 再発 (2026-05-10 経験、4 並列が全 kill)
+    -> 対策: 並列度 2 max、subagent dispatch 時に 30 分毎の中間 commit を厳命
+  - D1 cluster encoding が test 3 wells で seen 担保失敗 (= unseen cluster は default category)
+    -> 対策: AC-13 test_features_d1.py で 3 wells が seen cluster 確認、default fallback 実装
+  - Optuna HPO で overfit (= local CV best が LB worse、shake-up risk)
+    -> 対策: trial 数 100 max、final model は best params で 5 seed average
+
+acceptance_criteria:
+  - id: AC-1
+    description: src/rogii/beam.py 存在
+    type: output_exists
+    severity: required
+    path: src/rogii/beam.py
+  - id: AC-1b
+    description: src/rogii/pf.py 存在
+    type: output_exists
+    severity: required
+    path: src/rogii/pf.py
+  - id: AC-2
+    description: pytest smoke test pass (Numba 関数の動作 + leak check + numerical floor + D1 cluster seen 確認)
+    type: test_pass
+    severity: required
+    command: ".venv/bin/python -m pytest tests/test_beam.py tests/test_pf.py tests/test_features_d1.py -v --timeout=180"
+    expected_exit_code: 0
+    timeout_seconds: 300
+  - id: AC-3
+    description: ローカル CV (5-fold GroupKFold by typewell_groups.parquet group_id) TVT hidden RMSE <= 10.8 ft (= Approach A 単独到達目安、Ridge meta blend で 9 切り射程に乗る条件)
+    type: metric_threshold
+    severity: required
+    command: ".venv/bin/python -m rogii.train_v3 --exp exp004 --cv-only --quiet"
+    extract_pattern: "CV TVT hidden RMSE = ([0-9]+\\.[0-9]+)"
+    op: "<="
+    value: 10.8
+    timeout_seconds: 7200  # 2 hours
+  - id: AC-4
+    description: Kaggle kernel script が self-contained (= 外部 src/* に依存しない、Internet disabled で動く)
+    type: manual_review
+    severity: required
+    rubric: |
+      - kernel script は外部 src/rogii/* に依存しない (= 全コードを kernel script 内に inline)
+      - imports は stdlib + lightgbm + numpy + pandas + scipy + numba + catboost のみ
+      - DATA_DIR 自動検出ロジック (= /kaggle/input or local data/raw)
+      - time.perf_counter() で 8 hr hard timeout 入り
+      - random seed deterministic (= np.random.seed + numba seed + LGB seed=42 + CB seed=42 統一)
+      - D1 cluster 表 (= 67 entries) は kernel 内に hard-code (Kaggle dataset upload 不要に保つ)
+      - HPO best params は kernel 内に hard-code (= kernel 内で HPO 走らせない)
+  - id: AC-5
+    description: Kaggle kernel push 成功 (= title slug が id に resolve)
+    type: test_pass
+    severity: required
+    command: ".venv/bin/kaggle kernels push -p kaggle_kernels/exp004_numba_beam_pf/"
+    expected_exit_code: 0
+    timeout_seconds: 180
+  - id: AC-6
+    description: Kaggle kernel run COMPLETE + submission.csv 生成
+    type: manual_review
+    severity: required
+    rubric: |
+      - .venv/bin/kaggle kernels status ky7240/rogii-exp004-numba-beam-pf が "COMPLETE"
+      - kernel runtime <= 8 hours (Kaggle UI の elapsed 表示で確認、9 hr は危険、8 hr が安全 budget)
+      - kernel output に submission.csv が含まれる
+  - id: AC-7
+    description: Public LB <= 10.5 ft (= Approach A 単独到達目安、9 切り戦略の Ridge meta diversity 源条件)
+    type: manual_review
+    severity: required
+    rubric: |
+      - kaggle competitions submissions の publicScore <= 10.5
+      - exp003 LB 17.510 から劇的改善 (= -7.0 ft 以上)
+      - exp005 v2 LB 10.203 (= Approach B 現 best) より悪化していても OK (= diversity 源が目的)、ただし 10.5 超過は再設計
+      - CV (AC-3 <= 10.8) と LB diff > 0.5 ft なら overfit 警戒、postmortem skill 起動
+      - 想定 LB range: romantamrazov kernel `rogii-super-solution-lb-top-3` (LB 推定 10.1) ± 0.4 ft、自前再実装 + HPO + D1 で 10.0-10.4 帯狙い
+  - id: AC-8
+    description: License compliance (top3-distill §9 準拠)
+    type: manual_review
+    severity: required
+    rubric: |
+      - feat: commit message に "inspired by romantamrazov/rogii-super-solution-lb-top-3" を含む
+      - kernel script 冒頭の docstring に同上 + Apache 2.0 default 注記
+      - 著者コードを 30 行を超えて連続 copy していない (= アルゴリズム再実装)
+  - id: AC-9
+    description: feat branch を origin に push、merge は中央が引き受け (CLAUDE.md agents.md 準拠)
+    type: test_pass
+    severity: required
+    command: "git rev-parse --verify origin/feat/phase-3-exp004-numba-beam-pf"
+    expected_exit_code: 0
+    timeout_seconds: 30
+  - id: AC-10
+    description: experiments/exp004/notes.md が日本語で書かれ、6 section を含む
+    type: manual_review
+    severity: required
+    rubric: |
+      - CLAUDE.md "Plan Mode 出力ルール" 準拠 (本文日本語、コード識別子英語)
+      - section 1: 実装した features と移植元 file:line
+      - section 2: CV TVT hidden RMSE (per-fold + overall)
+      - section 3: HPO best params (LGB + CB) + Optuna trial history 要約
+      - section 4: loss ablation 結果 (MSE / Huber / MAE per-fold CV)
+      - section 5: D1 cluster encoding ablation (= ON / OFF CV delta)
+      - section 6: 失敗 pattern と回避ログ + 次の variants
+  - id: AC-11
+    description: ruff lint pass on changed files
+    type: test_pass
+    severity: recommended
+    command: ".venv/bin/python -m ruff check src/rogii/beam.py src/rogii/pf.py src/rogii/hpo.py src/rogii/features_d1.py kaggle_kernels/exp004_numba_beam_pf/exp004_numba_beam_pf.py"
+    expected_exit_code: 0
+    timeout_seconds: 30
+  - id: AC-12
+    description: Independent code review pass (reviewer agent judgment)
+    type: manual_review
+    severity: required
+    rubric: |
+      - Numba @njit functions: pure numerical (no Python objects in inner kernel)
+      - random seed deterministic (= 同一 seed で同一結果が再現する)
+      - leak check: PF / Beam の self_exclusion (top3-distill §8.1) 守られている
+      - numerical stability: lk = max(lk, 1e-300), pos clip with 50 ft buffer (top3-distill §8.2)
+      - error handling: linalg.solve except -> pinv fallback
+      - public API に explicit type hints
+      - 実装が src/rogii/imputers.py / features.py の既存 pattern に沿っている
+      - Optuna HPO は local 実行、kernel 内では best params hard-code のみ
+      - D1 cluster 表は kernel 内 inline、外部 dataset 不要
+  - id: AC-13
+    description: AG deep EDA finding D1 適用 = b_well 67 cluster ID feature 追加 + ablation
+    type: manual_review
+    severity: required
+    rubric: |
+      - per-well b_well (continuous) を 67 cluster ID (= categorical) に分類して feature 列追加
+      - cluster 分類: outputs/eda/deepest_eda/per-well-outlier.parquet 参照 (= AG 出力)
+      - LGB に categorical_feature 指定で投入
+      - CV で D1 単独 ablation (= ON / OFF) で contribution 計測、期待 -0.1 〜 -0.5 ft
+      - test 3 wells が seen cluster 内であること確認 (= 000d7d20/00e12e8b → 11373.26, 00bbac68 → 11855.20)
+      - unseen cluster の default fallback 実装 (= train mode fallback or "unknown" category)
+  - id: AC-14
+    description: Optuna HPO 100 trial で base model 性能最適化
+    type: manual_review
+    severity: required
+    rubric: |
+      - LGB hyperparam search space: learning_rate [0.01-0.1], num_leaves [15-255], min_data_in_leaf [5-100], lambda_l1/l2 [0-10], feature_fraction [0.5-1.0], bagging_fraction [0.5-1.0]
+      - CB hyperparam search space: learning_rate [0.01-0.1], depth [4-10], l2_leaf_reg [1-10]
+      - 100 trial、TPE sampler、CV TVT hidden RMSE を objective
+      - best params を experiments/exp004/notes.md section 3 に記録
+      - best CV TVT hidden RMSE が hard-code baseline (= exp007 = 10.66-10.93) より <= -0.2 ft 改善必須
+  - id: AC-15
+    description: Loss function ablation 3 種で best 選択
+    type: manual_review
+    severity: required
+    rubric: |
+      - MSE (= L2) / Huber δ=1.0 / MAE (= L1) の 3 種で同 best params で CV 比較
+      - 各 loss の per-fold CV TVT hidden RMSE を experiments/exp004/notes.md section 4 に記録
+      - best loss を AC-3 / AC-7 の対象として採用
+      - 既存 exp008 v3 (= Huber + hetero weighting) との比較考察を notes.md に含む
