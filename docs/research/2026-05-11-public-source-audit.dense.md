@@ -74,6 +74,37 @@ worst = diff.sort_values("abs_err", ascending=False).head(100)
 
 ---
 
+### 1.3 `alfaxadeyembe/rogii-lgbm-model-artifacts` (1.2 MB、 5/9 公開)
+
+**内容**:
+- `lightgbm_booster.txt` (3.1 MB) — trained LightGBM
+- `feature_columns.json` (2 KB) — 100+ feature names
+- `ensemble_weights.json` — `{"base_b0_last": 0.109, "lightgbm_prediction": 0.891, "oof_rmse": 14.959}`
+- `rogii_infer_runtime.py` (14.7 KB) — **inference source code** (= 数理本質読める)
+
+**author LB**:
+- Alfaxad rank 224/779, **LB 10.561** (= 我々 -0.6 ft 悪)
+- **OOF RMSE = 14.96 ft** → CV-LB gap = **-4.4 ft** (= 重要 evidence)
+
+**architecture**:
+- Blend = `0.11 × b_well_last_value + 0.89 × LGB(features)`
+- 100+ features:
+  - 基本: MD, X, Y, Z, GR (+ d_, step_, azi sin/cos, inclination, curvature)
+  - rolling **5 scales × 4 stats** = gr_roll_{mean,std,min,max}_{5,11,25,51,101} + z_roll_slope_*
+  - prefix features: prefix_tvt_{min/max/range/std/rows}, prefix_slope_md_{25,50,100,200,500}
+  - last_known: last_tvt, last_md, last_xyz, last_gr
+
+**判定**:
+- ❌ **採用不要** = LB 10.56 < 我々 9.957、 +0.6 ft 下位
+- ✅ **valuable artifacts**:
+  - `rogii_infer_runtime.py` = 解法を読める source = paradigm 2 流用候補 (= 「我々が見逃している simple base」 発見可能)
+  - **OOF 14.96 ft → LB 10.56 = CV-LB gap -4.4 ft** = ROGII の general CV-LB diff evidence (= 我々 exp008 v2 の CV-LB gap と比較する baseline)
+  - 「Blend = 0.11 × b_well_last + 0.89 × LGB」 = **b_well last value alone が LB の 11% 寄与する** simple baseline (= 我々 9-base に簡単な inject 可能性)
+
+**ablation candidate**: 我々の base 群 + `b_well_last` simple feature を 10 番目 base として追加 → blend、 0.1-0.3 ft lift 可能性 (= 数理本質弱いが軽量 try)
+
+---
+
 ### 1.2 `buchananliang/rogii-karnak-top2-public-artefacts` (6.6 MB、 5/8 公開)
 
 **内容**:
