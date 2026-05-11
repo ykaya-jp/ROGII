@@ -43,6 +43,44 @@ PENDING (= 5/11 0:13, 0:32 submitted): exp005 v2 (= Edge S 単独), exp005 v3 (=
 - ⚠️ **5 component の寄与分離**: exp005 v2 (Edge S 単独) と exp005 v3 (Edge S + Edge R) で Edge S/R を分離測定中、他 component は ablation 設計次第
 - ✅ subagent G の Approach B 採択を後続 subagent T/U に継承
 
+## 1.4 ★改善した sub: exp005 v2 (= Edge S 単独、-0.114 ft、2026-05-11 SCORED)
+
+### 1.4.1 改善 mechanism
+
+- **Edge S = round-to-grid post-process**: $\hat{TVT}_{\text{snap}}(s) = 0.01 \cdot \text{round}(\hat{TVT}(s) / 0.01)$
+- 数理根拠: dTVT が **0.01 ft grid に 100% 普遍** (= 773 wells 全数実測、hengck23 投稿 697431 msg#8)
+- mechanism: 連続 predict の小 noise を 0.01 grid に snap → systematic error が grid 単位の規律化、test 真値 (= 0.01 grid 上) との一致確率上昇
+- evidence: Kaggle 上 unique tvt 14151 → 4735 (= 67% 削減)、on-grid 比率 **100%**
+
+### 1.4.2 数値 verify (= 新 kaggle CLAUDE.md §8.1 #9 effect isolate)
+
+- 予測 (postmortem doc §4.1): 10.05-10.27、想定 -0.05〜-0.30 ft
+- 実 LB: **10.203**、改善 **-0.114 ft**
+- 予測 accuracy: ✅ **範囲内** (= 想定 spread の中域、若干下限寄り)
+
+### 1.4.3 仮説帰納 + 検証 plan
+
+| 仮説 | refute/verify status | 検証 plan |
+|---|---|---|
+| 「Edge S は連続 predict の noise を grid snap で削減」 | ✅ partial verified (= LB 改善方向だが、grid snap が systematic 誤差を悪化させるケースが想定上限を抑えた可能性) | exp005 v3 (= Edge S + Edge R) LB が出たら **Edge R 単独効果 = exp005 v3 LB - 10.203 (= Edge S 込) - (Edge R 想定 -0.37) で計算** |
+| 「Edge S 効果は base model の predict quality に依存」 | ❌ unverified | exp008 v2 (= 案 D + Edge S) LB が exp005 v2 改善幅 (-0.114) より大きいか小さいかで、Kalman base + Edge S の組み合わせ効果を check |
+| 「Edge S が想定下限 (-0.05) でなく中域 (-0.114) の理由」 | 仮説: karnakbaev base + SG smooth が既に grid 近傍に予測している → snap 効果 limited | exp008 v2 / exp009 v2 LB で base 違いの Edge S 効果幅を比較 |
+
+### 1.4.4 roadmap refine (= 9 切り roadmap への impact)
+
+旧 9 切り roadmap 想定 (`docs/dev/leaderboard.dense.md` §9 切り):
+- Edge S 想定 -0.05〜-0.30 ft → 実 **-0.114 ft** = **想定下限寄り**
+- 累積見積 (mid case): 10.317 base + 残 layer 累積 -2.5 ft で 7.8 着地想定
+- **修正後**: Edge S -0.114 を bake in、残 layer (= Edge R / 案 D / 案 E / Edge O / fold-misalign 解消 / Multi-seed MEDIAN / Huber + hetero) の累積を **再評価必要**
+
+### 1.4.5 次への反映 (= 5/12 以降の checklist)
+
+- ✅ **Edge S は全 kernel に inject 維持** (= exp005 v3 / exp008 v2 / exp009 v2 / exp008 v3 / exp009 v3 / exp009 v4 で全部適用済)
+- ⚠️ **Edge S 効果が想定下限 = grid snap で systematic 誤差が悪化するケースがある可能性** → exp008 v2 / exp009 v2 で base 違いを比較、もし base ごとに改善幅が大きく違う場合は **adaptive snap** (= 一部 well を skip) を v3 候補に
+- ✅ **AB ablation 設計の成功**: exp005 v2 vs exp005 v1 (= 10.317) で Edge S 単独効果が分離測定できた、今後の sub も同 pattern
+
+---
+
 ## 2. 悪化した sub × 3
 
 ### 2.1 exp003 = +2.815 悪化 (= **最大失敗**)
