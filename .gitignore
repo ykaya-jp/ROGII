@@ -246,3 +246,6 @@ mlartifacts/
 
 # Public Kaggle notebooks pulled for research (regenerable via .venv/bin/kaggle kernels pull)
 _research_kernels/
+
+# CatBoost training artifacts (auto-generated during fit, not commit-worthy)
+catboost_info/

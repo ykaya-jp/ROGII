@@ -1,0 +1,244 @@
+task_id: kaggle-rogii-cv-strategies-2026-05-11
+goal: |
+  ROGII の CV-LB correlation を確立し、 9 切り (= LB 8.x 帯到達) のための
+  fold 構造改革を完成する。 既存 exp010 = stratified Edge Q + adversarial
+  validation drop (= H10 Jensen lower bound 10.77 ft 解消、 σ_fold 0.526→
+  0.303 で 42% 削減) を継承し、 4 構造原理が異なる CV (C1 pseudo-test fold
+  via kNN / C2 multi-key stratified Edge Q / C3 adversarial validation drop /
+  C4 typewell hash + b_cluster post-hoc balance) を src/rogii/cv.py で揃え、
+  既存 SCORED 8 件 + RUNNING exp010 = 9 件で全 CV の OOF を再生成、 CV vs
+  public LB の multi-metric (Spearman + Pearson + LOO 安定性 + bootstrap 95%
+  CI lower) で **最良の CV 戦略を 1 つ確定** する。 これは「優勝路手法の CV
+  改善検証」 の前提 = ユーザー指示「local CV が LB と相関するデータ分割
+  戦略を見つけたうえで、 優勝路手法の CV が本当に改善しているかを検証」
+  + 「やるべきことをやるべきように、 数理的見地で」 への直接応答。
+
+context:
+  branch: feat/cv-strategies-final-2026-05-11
+  parent_branches:
+    - docs/deepest-eda-2026-05-11  # 130+ metric 深い EDA、 F1-F8 finding
+    - feat/phase-6-exp010-fold-reform  # stratified Edge Q + adversarial drop 既存実装
+  spec: docs/research/2026-05-11-test-distribution.dense.md  # F1-F8 findings, CV 設計示唆
+  related_research:
+    - docs/research/2026-05-11-deepest-eda.dense.md  # 130+ metric, 4 核心発見
+    - docs/dev/leaderboard.dense.md  # 8 SCORED + PENDING 2 + CV-LB gap 議論
+    - docs/dev/2026-05-11-h10-postmortem-and-fold-reform.dense.md  # H10 Jensen lower bound (10.77 ft 天井) 発見 (= exp010 起源)
+    - experiments/exp010/design.md  # stratified Edge Q + adversarial validation drop 設計
+    - experiments/exp010/notes.md  # exp010 smoke 4/4 PASS 結果
+  existing_work_to_inherit:
+    - src/rogii/cv.py (feat/phase-6-exp010-fold-reform branch): build_stratified_edge_q_folds, compute_typewell_hashes, build_edge_q_folds, verify_edge_q_no_leak, summarize_fold_stratification — **完全動作確認済 + 4/4 smoke PASS**
+    - kaggle_kernels/exp010_fold_reform/exp010_fold_reform.py (4981 行): adversarial validation drop の compute_adversarial_well_features + fit_adversarial_classifier + apply_adversarial_reweight (= kernel inline) を src/ 移管対象
+    - tests/exp010/test_smoke.py (= 既存 4 case)
+  gm_mindset:
+    - "~/projects/kaggle/CLAUDE.md §1.1 Good CV is half of success (Bestfitting)"
+    - "~/projects/kaggle/CLAUDE.md §1.3 Trust your CV not LB (Greg Park)"
+    - "~/projects/kaggle/CLAUDE.md 8 警告 #4 (Chris Deotte) + #8 (Bestfitting)"
+  user_directive: |
+    2026-05-11 user message 1: 「local CV が LB と相関する、 またかつデータとタスクの
+    本質に沿うようなデータ分割戦略を見つけたうえで、 優勝できると思っている手法の
+    CV が本当に今より改善しているのかを検証しようよまずは」
+    2026-05-11 user message 2: 「やるべきことをやるべきように やってくれ 数理的
+    見地に立って」 (= full delegation、 数理的 refine 必須)
+  jensen_lower_bound:
+    formula: "CV = sqrt(mean(RMSE^2) + var(RMSE_per_fold))"
+    exp007_observed: "mean(RMSE) ≈ 10.71, σ_fold ≈ 1.175 → CV ≈ 10.77 ft 天井"
+    exp010_after_stratified: "σ_fold 0.303 (smoke) → CV 天井 10.0-10.3 ft (理論)"
+    interpretation: "base model improve だけでは天井超え不能、 fold 構造改革が必須"
+  inspired_by:
+    - Bestfitting interview (https://medium.com/kaggle-blog/profiling-top-kagglers-bestfitting)
+    - Chris Deotte adversarial validation writeups
+    - sklearn StratifiedGroupKFold (multi-label 拡張は自前)
+    - exp010 design (= H10 postmortem from subagent V)
+
+deliverables:
+  - path: src/rogii/cv.py
+    purpose: |
+      既存 (feat/phase-6-exp010-fold-reform): make_well_folds, compute_typewell_hashes,
+      build_edge_q_folds, verify_edge_q_no_leak, build_stratified_edge_q_folds,
+      summarize_fold_stratification を継承。 **新規追加**: (1) build_pseudo_test_fold (= C1),
+      (2) build_multi_key_stratified_edge_q_folds (= C2 multi-key 拡張),
+      (3) compute_adversarial_classifier_oof + apply_adversarial_drop_fold (= C3、
+      kernel inline から src 移管),
+      (4) compute_b_cluster_balance (= C4 post-hoc balance check helper),
+      (5) compute_test_distance_features (= C1 距離関数 helper: z-score + PCA top-10)
+  - path: src/rogii/typewell_hash.py
+    purpose: cv.py から compute_typewell_hashes を移管 + 13 dup group の hard-coded snapshot で reproducibility 確保
+  - path: tests/test_cv_strategies.py
+    purpose: tests/exp010/test_smoke.py を継承 + 拡張 — (a) C1 no-leak + F1 b_cluster rep + distance deterministic, (b) C2 multi-key fold balance σ < 0.05, (c) C3 OOF auc + drop 適用 row 数, (d) C4 post-hoc balance check の chi-square test
+  - path: docs/research/2026-05-11-cv-strategy-candidates.dense.md
+    purpose: 4 CV の数理本質 + 出典 + bin 設計 + ablation 設計 + 既存 exp010 work との関係 (= 日本語)
+  - path: scripts/regenerate_oof.py
+    purpose: 8 SCORED + exp010 (RUNNING 完走時) = 9 件 × 4 CV = 36 OOF 再生成 pipeline。 各 SCORED kernel の training pipeline を fold-aware に再実行。 Colab/Kaggle Notebook 並列実行を前提
+  - path: tools/measure_cv_lb_correlation.py
+    purpose: OOF table から各 CV × SCORED の RMSE を読み、 (a) Spearman, (b) Pearson, (c) Leave-One-Out Spearman 平均, (d) bootstrap 1000-iter 95% CI lower bound を計算。 --print-best-spearman で標準出力に best_spearman=<value> を 1 行
+  - path: outputs/oof/cv-lb-correlation/oof_table.parquet
+    purpose: 9 SCORED × 4 CV + baseline plain GroupKFold = 計 45 OOF 集約表 (column: exp, cv_strategy, oof_rmse, public_lb, fold_rmse_list_json)
+  - path: docs/dev/2026-05-11-cv-lb-correlation.md
+    purpose: 結果表 = 5 CV (= 4 新規 + baseline) × 4 metric (Spearman, Pearson, LOO, bootstrap CI lower) + 9 SCORED の OOF RMSE 詳細 + 最良 CV 戦略の宣言
+
+baseline:
+  - metric: existing_cv_strategies_count
+    value: 3
+    note: |
+      feat/phase-6-exp010-fold-reform にて (1) make_well_folds = plain GroupKFold,
+      (2) build_edge_q_folds = typewell hash GroupKFold (= Edge Q v2),
+      (3) build_stratified_edge_q_folds = stratified single-key (= tw_gr_resid_std quartile)
+  - metric: exp010_sigma_fold_smoke
+    value: 0.303
+    note: exp010 smoke で σ_fold 0.526 (baseline plain) → 0.303 (stratified Edge Q) = 42% 削減
+  - metric: existing_cv_lb_spearman
+    value: null
+    note: 未測定 = 本タスクの第一成果物として記録
+  - metric: exp007_jensen_lower_bound
+    value: 10.77
+    note: σ_fold 1.175 で CV 数学的天井、 base improve だけでは超不能
+  - metric: exp010_jensen_lower_bound_target
+    value: 10.0
+    note: σ_fold 0.5 → CV 天井 10.0-10.3、 stratified Edge Q で達成想定
+  - metric: exp008_v2_lb_public
+    value: 9.957
+    note: 現 best、 Gold まで -0.038 (Top 10 = 9.728)
+
+out_of_scope:
+  - C5 leave-one-b-cluster-out 戦略 (= 67 fold で fragility、 cluster サイズ heterogeneous)
+  - exp010 既存実装の rewrite (= 動作確認済、 拡張のみ)
+  - exp011+ 以降の新 feature 投入 (= 別タスク、 CV 確立後)
+  - PENDING 2 件 (exp009 v2 = 52534803, exp008 v3 = 52539046) の SCORE 確認 (= 受動待ち、 出たら 10/11 件目として correlation table 追加)
+  - exp010 kernel の RUNNING 完走待ち (= 同上、 SCORED 後に 9 件目として追加。 完走時刻不明だが現在 19h+ で完了予想 24h 以内)
+  - karnakbaev base 自体の代替 (= 既存 pretrained 流用)
+  - production submit (= 別タスク、 確定 CV で「優勝路手法」 測定後)
+  - C2/C3 hyperparameter tuning (= bin 境界 / classifier 種別は初期固定、 ablation は将来課題)
+
+risks:
+  - id: R1
+    description: 9 SCORED × 4 CV = 36 OOF 再生成 = 80+ hr local CPU (= karnakbaev base が 1 fold 30+ min)
+    mitigation: Colab/Kaggle Notebook 4-server 並列で wall clock 20-30 hr、 段階的に AC-5 で完走確認のみ。 優先順位: exp008 v2 (= best) + exp005 + exp005 v2 + exp007 + exp010 の 5 件先行、 残り 4 件は後追い
+  - id: R2
+    description: exp003 (LB 17.510) は failed exp で OOF 価値疑問、 corr 計算で outlier 化
+    mitigation: 全 9 件で計算 + exp003 除外版も併記、 robust 性 (= LOO 安定性) で別途検証
+  - id: R3
+    description: C3 adversarial classifier が 776 wells で test 識別を 100% 学習 = overfit、 P(test|well) が極端
+    mitigation: kernel 内既存実装 (= 5-fold StratifiedKFold + LightGBM binary + AUC threshold) を src 移管時にも保持、 OOF 確率で fold 割当、 AUC<0.6 で drop skip
+  - id: R4
+    description: C2 multi-key stratified の bin 設計 fragmenting
+    mitigation: |
+      visible_ratio(5) × b_cluster(67) × typewell_n_classes(2) × tail_dir(2) = 1340 bin で fragmenting → **解消版**:
+      - visible_ratio: 5 quantile bin
+      - b_cluster: 「test 所属 cluster (11373/11855)」 vs 「others」 の 2 値に collapse
+      - typewell_n_classes: 「6 class」 vs 「10 class」 の 2 値
+      - = 計 5 × 2 × 2 = 20 stratum、 776 wells で stratum 平均 39 wells = stratify 機能
+      - tail_dir は marginal balance check のみ (= bin に入れない)
+  - id: R5
+    description: 9 SCORED は全部 karnakbaev base 流用なので独立性低い、 effective sample size 5-6 件
+    mitigation: Spearman は rank-based でサンプル少い場合 variance 大、 multi-metric (Pearson + LOO + bootstrap CI lower) で robust 化、 結果解釈で「9 SCORED は LB 多様性が薄い」 明記
+  - id: R6
+    description: AC-7 target (= multi-metric 全部 pass) が 4 CV のどれも達成できない可能性
+    mitigation: 達成失敗時は postmortem skill fire、 learned/failure-patterns/ 追記、 5+ CV 拡張 or feature engineering 路線を別タスクで提案。 AC-7 を required で残すことで「現実逃避な完了宣言」 を防ぐ
+  - id: R7
+    description: C1 距離関数の hand-tuning overfit (= 32 metric から PCA top-10 取った時の variance ratio が低いと distance 信頼薄)
+    mitigation: PCA variance ratio ≥ 0.5 を C1 fold validity check に組み込み、 不足なら C1 を「該当 CV 不適格」 として correlation 計算から除外 + 設計書に明記
+  - id: R8
+    description: exp010 既存 build_stratified_edge_q_folds が train_df['target'] 列を要求 (= cv.split に target 渡す) が新規 OOF pipeline で target 取得タイミング不一致
+    mitigation: cv.py 内 wrapper で target 列 optional 化、 不在時は dummy zeros 渡し (= GroupKFold は y を見ない仕様)、 単体 test で no-target ケース pass 確認
+
+acceptance_criteria:
+  - id: AC-1
+    description: 既存 cv.py の 6 関数 (make_well_folds, compute_typewell_hashes, build_edge_q_folds, verify_edge_q_no_leak, build_stratified_edge_q_folds, summarize_fold_stratification) + 新規 4 関数 (build_pseudo_test_fold, build_multi_key_stratified_edge_q_folds, compute_adversarial_classifier_oof, compute_b_cluster_balance) が src/rogii/cv.py に存在し import 可能
+    type: test_pass
+    severity: required
+    command: "source .venv/bin/activate && python -c 'from rogii.cv import make_well_folds, compute_typewell_hashes, build_edge_q_folds, verify_edge_q_no_leak, build_stratified_edge_q_folds, summarize_fold_stratification, build_pseudo_test_fold, build_multi_key_stratified_edge_q_folds, compute_adversarial_classifier_oof, compute_b_cluster_balance; print(\"ok\")'"
+    expected_exit_code: 0
+    timeout_seconds: 30
+
+  - id: AC-2
+    description: 全 CV 単体 test pass (= no-leak + balance + F1 b_cluster rep + F8 typewell hash leak free + deterministic seed + 既存 exp010 smoke 4 case + 新規 C1/C2 multi-key/C3 src 移管/C4 post-hoc test)
+    type: test_pass
+    severity: required
+    command: "source .venv/bin/activate && pytest tests/test_cv_strategies.py tests/exp010/test_smoke.py -v"
+    expected_exit_code: 0
+    timeout_seconds: 600
+
+  - id: AC-3
+    description: src/rogii/typewell_hash.py が存在し、 13 dup group snapshot を hard-code で持つ (= reproducibility)
+    type: test_pass
+    severity: required
+    command: "source .venv/bin/activate && python -c 'from rogii.typewell_hash import KNOWN_DUPLICATE_GROUPS; assert len(KNOWN_DUPLICATE_GROUPS) == 13, f\"expected 13 groups, got {len(KNOWN_DUPLICATE_GROUPS)}\"; print(\"ok\")'"
+    expected_exit_code: 0
+    timeout_seconds: 30
+
+  - id: AC-4
+    description: 設計書 docs/research/2026-05-11-cv-strategy-candidates.dense.md 存在 (= 4 CV の数理本質 + 出典 URL + 実装方針 + bin 設計 + ablation + 既存 exp010 との関係、 日本語)
+    type: output_exists
+    severity: required
+    path: docs/research/2026-05-11-cv-strategy-candidates.dense.md
+
+  - id: AC-5
+    description: 9 SCORED (= exp002, exp003, exp005, exp005 v2, exp005 v3, exp006, exp007, exp008 v2, exp010) × 4 CV + baseline plain GroupKFold = 計 45 OOF を集約した outputs/oof/cv-lb-correlation/oof_table.parquet
+    type: output_exists
+    severity: required
+    path: outputs/oof/cv-lb-correlation/oof_table.parquet
+
+  - id: AC-6
+    description: docs/dev/2026-05-11-cv-lb-correlation.md に 5 CV × 4 metric (Spearman, Pearson, LOO 平均, bootstrap CI lower) = 20 数値 + 9 SCORED の OOF RMSE 詳細
+    type: output_exists
+    severity: required
+    path: docs/dev/2026-05-11-cv-lb-correlation.md
+
+  - id: AC-7
+    description: 4 CV 戦略の少なくとも 1 つで multi-metric 全部 pass = (Spearman ≥ 0.7) AND (Pearson ≥ 0.7) AND (LOO 平均 Spearman ≥ 0.6) AND (bootstrap 95% CI lower ≥ 0.5)
+    type: metric_threshold
+    severity: required
+    command: "source .venv/bin/activate && python tools/measure_cv_lb_correlation.py --print-best-multi-metric-pass-count"
+    extract_pattern: "best_multi_metric_pass_count=([0-9]+)"
+    op: ">="
+    value: 4
+    timeout_seconds: 60
+
+  - id: AC-8
+    description: baseline plain GroupKFold も同時測定して docs/dev/2026-05-11-cv-lb-correlation.md に baseline 行として記録 (= 改善幅可視化)
+    type: output_exists
+    severity: required
+    path: docs/dev/2026-05-11-cv-lb-correlation.md
+
+  - id: AC-9
+    description: |
+      最良 CV 戦略の選定理由 (= multi-metric composite score 最大、 ただし exp003 除外時も上位、
+      fold balance OK、 解釈可能) を docs/research/2026-05-11-cv-strategy-candidates.dense.md
+      末尾に宣言文 + 評価表
+    type: manual_review
+    severity: required
+    rubric: |
+      - 「最良 CV =<戦略名>」 と docs 末尾に宣言文がある
+      - 選定理由が 5 観点 (= Spearman / Pearson / LOO / bootstrap CI lower / 解釈可能性) で評価表にまとめ
+      - composite score = (Spearman + Pearson + LOO + CI_lower) / 4 を明示計算
+      - exp003 を含む / 除外する 両方の composite で rank reversal が無いことを確認
+      - 「次タスクで 優勝路手法を測る基準 CV はこれ」 を明示
+      - 推奨せず軸提示原則 (= ~/.claude/CLAUDE.md §11.1 主道) は守りつつ、 機械的指標で最良を確定
+
+  - id: AC-10
+    description: H10 Jensen lower bound 改善の数値確認 — exp010 (= 既存 stratified Edge Q) の σ_fold が exp007 (= baseline plain GroupKFold under same model) より統計的に低い (= bootstrap で σ_fold 95% CI が重ならない)
+    type: manual_review
+    severity: required
+    rubric: |
+      - docs/dev/2026-05-11-cv-lb-correlation.md に exp007 σ_fold vs exp010 σ_fold の bootstrap 比較あり
+      - exp007 σ_fold 95% CI と exp010 σ_fold 95% CI が **disjoint** (= 重ならない)
+      - 「Jensen lower bound が 10.77 ft から X.XX ft に下がった」 を明示
+      - X.XX ≤ 10.3 が必要条件 (= exp010 設計目標)
+
+  - id: AC-11
+    description: 並列実行された OOF の再現性 = scripts/regenerate_oof.py を seed=42 で再走しても 36 OOF の各 RMSE が ±0.01 ft 以内
+    type: manual_review
+    severity: recommended
+    rubric: |
+      - scripts/regenerate_oof.py docstring に seed/precision/環境依存性 明記
+      - Colab/Kaggle Notebook と local CPU で同じ seed で走らせた OOF の RMSE 差 ±0.01 ft 以内
+      - 再現できないケースは原因 (= floating-point / library version) を記録
+
+  - id: AC-12
+    description: 次タスク (= 確定 CV で「優勝路手法 A-E」 の CV 改善を測定) のための plan draft が docs/dev/2026-05-11-cv-lb-correlation.md 末尾に paragraph で残る
+    type: manual_review
+    severity: recommended
+    rubric: |
+      - 次タスク task_id が draft されている (= 例「kaggle-rogii-winning-candidates-cv-test-2026-05-12」)
+      - 「これらの手法を確定 CV で測る」 リストに A (NN paradigm) / B (deepest EDA D1+D4+D9) / C (Sparse GP M=500 拡張) / D (Per-Well MoE) / E (LLM-driven) が含まれる
+      - 各候補の 期待 CV 改善幅 (= -0.3〜-0.6 ft 等) と検証順序明記
