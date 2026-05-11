@@ -1,0 +1,13 @@
+{
+  "id": "ky7240/rogii-exp004-numba-beam-pf",
+  "title": "rogii-exp004-numba-beam-pf",
+  "code_file": "exp004_numba_beam_pf.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "false",
+  "enable_internet": "false",
+  "dataset_sources": [],
+  "competition_sources": ["rogii-wellbore-geology-prediction"],
+  "kernel_sources": []
+}
