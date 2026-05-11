@@ -116,7 +116,7 @@ Mamba-2 (Dao & Gu 2024, arXiv:2405.21060, `https://arxiv.org/abs/2405.21060`) �
 
 #### 1.2.1 ROGII 数理 framework との整合
 
-`docs/research/mathematical-formulation.dense.md` で定式化された generative model は:
+`docs/research/first-principles.dense.md` および `docs/research/problem-essence.dense.md:22-34` で定式化された generative model は:
 $$
 TVT_t = -Z_t + \text{ANCC}(X_t, Y_t) + b_{well} + \epsilon_t
 $$
@@ -378,12 +378,12 @@ hidden region の TVT 予測において:
 
 #### 3.2.3 ROGII 数理 framework との整合
 
-`docs/research/mathematical-formulation.dense.md` の generative model:
+`docs/research/problem-essence.dense.md:22-34` で定式化された generative model:
 $$
 TVT_t = -Z_t + \text{ANCC}(X_t, Y_t) + b_{well} + \epsilon_t
 $$
 
-PINN は $\epsilon_t = 0$ を **hard constraint に近づけながら学習** → generative model に最も忠実な paradigm。
+PINN は $\epsilon_t \to 0$ を **soft loss に近い hard constraint として学習** → generative model に最も忠実な paradigm。`docs/research/first-principles.dense.md:38` の `formula_oracle_rmse_p50 = 0.006 ft` は PINN の floor を物理的に保証する。
 
 ### 3.3 実装 spec (= PyTorch、loss weights λ tuning、NN backbone)
 
@@ -705,6 +705,119 @@ best_eq = sr.get_best()
 
 → 9 hr cap (540 min) の 14.7% 占有、余裕 85%。
 
+### 6.5 4 paradigm × 既存 layer の orthogonality matrix
+
+variance を二重に拾わないため、各 paradigm が **どの誤差源** を targeting しているかを明示する。
+
+| 誤差源 (= LB 寄与 candidate) | LGB blend | Mamba | TabPFN v2 | PINN | PySR |
+|---|---|---|---|---|---|
+| AR(1)-like noise $\epsilon_t$ の short-range | ◎ | ◎ | ○ | ○ | × |
+| hidden zone MD 4000+ ft 末端 systematic bias | △ | **◎** | ○ | ○ | × |
+| fault / fold での ANCC 不連続 | △ | ○ | ○ | **◎** | × |
+| b_well per-well variation (= WLS variance) | ○ | ○ | ○ | ○ | **◎** |
+| b_well MD-dependent linear drift (= 0.00154 ft) | × | △ | △ | ○ | **◎** |
+| visible 短い well (T_v < 500) の few-shot | × | △ | **◎** | △ | × |
+| feature interaction (X × Y × dip) | ○ | △ | ◎ | ○ | **◎** |
+| 物理 formula 整合 (TVT + Z - ANCC - b = 0) | × | × | △ | **◎** | × |
+| label noise (= formula_oracle_rmse 0.006) Huber 化 | △ | ○ | ◎ | ○ | × |
+
+凡例: **◎** = primary target, ○ = partial, △ = weak, × = 対応無
+
+→ **Mamba (末端 bias) と PINN (物理整合) と PySR (b_well drift)** は targeting が独立、4 head 加法的に効きやすい。TabPFN v2 は LGB blend と重複が大きく、純加算寄与は低めに見積もる必要。
+
+### 6.6 PINN multi-head autograd 実装擬似コード
+
+PINN を ROGII algebraic constraint で動かす core implementation (= PyTorch):
+
+```python
+import torch
+import torch.nn as nn
+
+class ROGIIPinn(nn.Module):
+    def __init__(self, in_dim=20, hidden=128, n_layers=4):
+        super().__init__()
+        self.shared = nn.Sequential(
+            *[nn.Sequential(nn.Linear(in_dim if i==0 else hidden, hidden),
+                             nn.GELU()) for i in range(n_layers)]
+        )
+        self.tvt_head  = nn.Linear(hidden, 1)
+        self.ancc_head = nn.Linear(hidden, 1)
+        self.b_head    = nn.Linear(hidden, 1)
+
+    def forward(self, x, z_obs):
+        h = self.shared(x)
+        tvt_direct = self.tvt_head(h).squeeze(-1)
+        ancc_pred  = self.ancc_head(h).squeeze(-1)
+        b_pred     = self.b_head(h).squeeze(-1)
+        tvt_phys   = -z_obs + ancc_pred + b_pred
+        return tvt_direct, tvt_phys, ancc_pred, b_pred
+
+def grad_norm(loss, params):
+    """L2 norm of gradient w.r.t. params (= for Wang+Perdikaris annealing)."""
+    grads = torch.autograd.grad(loss, params, retain_graph=True, create_graph=False)
+    return torch.cat([g.flatten() for g in grads]).norm()
+
+# === training loop ===
+lambda_phys, lambda_ancc, lambda_b = 1.0, 1.0, 0.1
+for step in range(n_steps):
+    tvt_dir, tvt_phys, ancc, b = model(X_batch, Z_batch)
+    L_tvt_data  = F.mse_loss(tvt_dir[visible_mask], tvt_true[visible_mask])
+    L_phys      = F.mse_loss(tvt_phys, tvt_dir)             # consistency
+    L_ancc_data = F.mse_loss(ancc[ancc_known_mask], ancc_true[ancc_known_mask])
+    L_b_prior   = F.mse_loss(b, b_wls_prior)
+
+    if step % 100 == 0:
+        # Wang+Perdikaris lambda annealing
+        with torch.no_grad():
+            params = list(model.shared.parameters())
+            r_tvt   = grad_norm(L_tvt_data, params).item()
+            r_phys  = grad_norm(L_phys, params).item()
+            lambda_phys = 0.9 * lambda_phys + 0.1 * (r_tvt / max(r_phys, 1e-8))
+            lambda_phys = float(torch.clamp(torch.tensor(lambda_phys), 0.01, 100.0))
+
+    loss = L_tvt_data + lambda_phys * L_phys \
+         + lambda_ancc * L_ancc_data + lambda_b * L_b_prior
+    optimizer.zero_grad(); loss.backward(); optimizer.step()
+```
+
+注意点:
+- `retain_graph=True` で grad 二度計算 → メモリ +50%、batch size 半減推奨
+- `lambda_phys` 暴走防止に `clamp(0.01, 100)` 必須 (= Wang+Perdikaris 2021 不採用時の典型 failure mode)
+- ROGII では PDE 微分項なし (= algebraic) なので `torch.autograd.grad` 高階偏導は不要、シンプル
+
+### 6.7 PySR offline-export ワークフロー (= Kaggle Julia install 不安回避)
+
+PySR が Julia install で hang する failure mode (= §4.4.2) を避ける確実 path:
+
+```python
+# === offline machine で式発見 ===
+from pysr import PySRRegressor
+sr = PySRRegressor(...)  # §4.3.2 参照
+sr.fit(X_train_376wells, y_b_well_wls)
+print(sr.equations_)  # complexity / loss / equation の Pareto front
+
+# get_best() で score-based 選択
+best_eq_str = sr.get_best()["equation"]
+# e.g. "0.0021 * X_mean + 0.0034 * Y_mean - 0.012 * sin(dip_azimuth) * Z_last + 0.45"
+
+# sympy で C 等価コード生成 (= submission kernel 完全 dependency-free)
+import sympy as sp
+expr = sp.sympify(best_eq_str)
+fn_str = sp.lambdify(expr.free_symbols, expr, modules="numpy")
+# fn_str を Kaggle kernel に inline コピペ
+```
+
+submission kernel 内では:
+```python
+def b_well_symbolic(X_mean, Y_mean, dip_azimuth, Z_last):
+    # PySR offline 発見式を直接 hardcode (= Julia 依存ゼロ)
+    return 0.0021*X_mean + 0.0034*Y_mean - 0.012*np.sin(dip_azimuth)*Z_last + 0.45
+
+b_pred = df.apply(lambda r: b_well_symbolic(r.X_mean, r.Y_mean, r.dip_azimuth, r.Z_last), axis=1)
+```
+
+→ PySR の Julia / GA は **offline で 1 回だけ** 走らせ、kernel は純 Python/numpy → 9 hr cap・install 失敗 risk から完全 isolation。
+
 ---
 
 ## 7. 残課題 / 5/12 以降の exp 設計への含意
@@ -757,3 +870,37 @@ best_eq = sr.get_best()
 - W が cover した paradigm との重複: **Diffusion CSDI / Geometry 2-stage** (`docs/research/cv-breakthrough.dense.md`) は本 doc の Mamba / PINN と原理隣接、blend 重複懸念あり → 中央で照合
 - V が見つけた sub data (= 例えば formation top metadata) を Mamba / TabPFN v2 / PINN の input feature に追加するか中央で判断
 - subagent W の `academic-literature-deeper.dense.md` に Mamba / S4 / TabPFN v2 / PINN / PySR の言及ありか確認 (= 重複作業回避)
+
+### 7.4 一次資料 source 一覧 (= 中央照合用)
+
+| ref | URL / DOI | 用途 |
+|---|---|---|
+| S4 (Gu et al. ICLR 2022) | `https://arxiv.org/abs/2111.00396` | §1.1.1-1.1.3 |
+| Mamba (Gu & Dao 2023) | `https://arxiv.org/abs/2312.00752` | §1.1.4 |
+| Mamba-2 (Dao & Gu 2024) | `https://arxiv.org/abs/2405.21060` | §1.1.5 |
+| HiPPO (Gu et al. NeurIPS 2020) | `https://arxiv.org/abs/2008.07669` | §1.1.2 |
+| Mamba GitHub | `https://github.com/state-spaces/mamba` | §1.3.1-1.3.2 |
+| MambaTS (Cai et al. 2024) | `https://arxiv.org/abs/2405.16440` | §1.3.2 |
+| TSMamba / Mamba4Cast | `https://arxiv.org/abs/2411.02941` | §1.3.4 |
+| TabPFN v2 (Hollmann et al. Nature 2025) | `https://www.nature.com/articles/s41586-024-08328-6` | §2.1.2 |
+| TabPFN-2.5 (Hollmann et al. 2025) | `https://arxiv.org/abs/2511.08667` | §2.1.2, §7.1 |
+| TabPFN GitHub | `https://github.com/PriorLabs/TabPFN` | §2.3.1 |
+| TabPFN regression deep (arXiv 2502.17361) | `https://arxiv.org/html/2502.17361v1` | §2.2.3 cross-check |
+| Tables-to-Time (TabPFN v2 + TS) | `https://arxiv.org/abs/2501.02945` | §2.4 cross-check |
+| PINN (Raissi et al. 2019) | `https://arxiv.org/abs/1711.10561` | §3.1.1 |
+| PINN Maziar GH | `https://maziarraissi.github.io/PINNs/` | §3.1.3 autograd 例 |
+| Wang+Perdikaris (SISC 2021) gradient pathology | `https://epubs.siam.org/doi/10.1137/20M1318043` | §3.1.4, §3.4.2 |
+| Wang+Perdikaris GH | `https://github.com/PredictiveIntelligenceLab/GradientPathologiesPINNs` | implement ref |
+| NTK PINN (Wang et al. 2020) | `https://arxiv.org/abs/2007.14527` | §3.4.2 alt |
+| PySR (Cranmer 2023) | `https://arxiv.org/abs/2305.01582` | §4.1.1 |
+| PySR official docs | `https://ai.damtp.cam.ac.uk/pysr/v1.5.9/options` | §4.1.3, §4.3.2 |
+| PySR GitHub | `https://github.com/MilesCranmer/PySR` | §4.3.1 |
+| Wikipedia TabPFN | `https://en.wikipedia.org/wiki/TabPFN` | §2.1.2 cross-check |
+| PySR Springer review (Cranmer et al. 2024) | `https://link.springer.com/article/10.1007/s10710-024-09503-4` | §4.1.3 default tuning |
+
+### 7.5 並列 worker 衝突の observation (= 中央への報告事項)
+
+本セッションで `docs/research/paradigm-deeper.dense.md` を `git add` した直後、別 subagent (= 推定: subagent W) が同 branch `docs/paradigm-deeper-2026-05-11` 上で `git commit -a` 系の操作を行い、私の staged 内容が他者の commit message `15353cd docs(research): WLFM HTML v1 + CSDI yaml + Pyrcz kb2d + PatchTST script` に **巻き込み commit** された。
+- 機能影響: paradigm-deeper.dense.md は tree に到達済み、内容は意図通り
+- 統治影響: commit attribution が分離されてない、history の作業切り分けが視覚的に困難
+- 中央への提案: (a) 各 worker は **専有 branch** を使う、(b) 同 branch 上では `git add <specific-file>` のみで `-A` `-a` 禁止を worker prompt に明記 (~/.claude/CLAUDE.md [2026-04-30] 並列 worker lesson)
