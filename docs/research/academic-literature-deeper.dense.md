@@ -667,6 +667,22 @@ where $\theta$ は per-well calibration parameter、$x_v$ は visible 区間、$
 | #4 MEMO TTT | △ | × | 1.5x | 2-3d | -0.3 | 中 |
 | #5 WLFM α/β | ◎ | △ | 1x | 2-10d | -1.0 / -0.3 | α: 不明 / β: 中 |
 
+### 7.7 「優勝本質性」criterion (= `kaggle/CLAUDE.md §11`) との照合
+
+> 永続原則: 「軽さでなく数理本質で優勝に近づくかで選ぶ」
+
+各 hack を §11.2 の **5 問** で自己評価:
+
+| hack | Q1 数理本質 | Q2 優勝寄与 | Q3 代替比較 | Q4 rule 耐性 | Q5 datapoint 価値 |
+|---|---|---|---|---|---|
+| #1 TimeXer | 物理事前 `TVT = -Z + ANCC + b` を attention で **直接** encode = **本質** | -0.5 ft 上限、 gold zone 入りに線形寄与 | PatchTST cross-attention 自前実装より 12 benchmark 実績で確度高 | clean static 解、 rule fix 耐性 ◎ | endogenous/exogenous 分離 ablation で isolate 可 |
+| #2 CSDI | uncertainty marginalization = Bayesian posterior 近似 = **本質** | -0.7 ft 上限、 9 切りに直接到達余地 | SAITS よりも理論的厳密 (= diffusion vs self-attention reconstruction) | data-driven、 rule fix 耐性 ◎ | nsample ablation で uncertainty contribution isolate |
+| #3 Kriging | BLUE 理論最適、 anisotropic 構造の数学厳密化 = **本質** | -0.4 ft、 確度高 (= variogram fit さえ通れば必ず最適) | KNN k=10 等方は heuristic、 kriging が math 正解 | 完全静的、 rule fix 耐性 ◎◎ | per-formation variogram parameter 単独 ablation |
+| #4 MEMO TTT | per-well adaptation = transductive learning の数理 = **本質** | -0.3 ft、 控えめ | TTT++ TFA より augmentation diversity に依存、 random_stretch 多様性が key | augmentation rule 内、 host fix 影響なし | augmentation N ablation で entropy 寄与 isolate |
+| #5 WLFM β | cross-well transfer = foundation model の本質 | path β -0.3 ft、 path α は前提次第 | self-pretrain よりも external pretrain weights の利点 | clean static (= weights freeze + fine-tune)、 rule 耐性 ◎ | 1200 well pretrain 効果は ablation 可、 ただし α 前提が不明 |
+
+**5 件すべて §11.2 五問通過**。 軽さで選ばれた hack なし。 中央 / 開発者は本表を参照して **着手順序** を決定する (= 確度高 + 工数小 が #3 Kriging、 上限高 + 工数中 が #2 CSDI、 等)。
+
 ---
 
 ## 8. 残課題 / 時間切れで深掘りできなかった部分
