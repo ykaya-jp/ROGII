@@ -40,6 +40,38 @@ worst = diff.sort_values("abs_err", ascending=False).head(100)
 
 これは「Gold Top10 と我々の delta」 = 数理的 valuable (= 「Top10 が見つけている signal を我々が見落としている箇所」 を pinpoint)。
 
+#### 1.1.1 実測 diagnostic (= 2026-05-11、 14151 hidden rows)
+
+実際に我々 exp008 v2 (= LB 9.957) 出力 (= kaggle kernels output で取得) と Gold Top10 submission を per-row 比較:
+
+**overall**:
+- delta mean abs = **2.83 ft**
+- delta std = 2.26 ft、 p50 = 2.20、 p90 = 6.29、 p99 = 8.91、 **max = 10.78 ft**
+
+**per-well**:
+
+| well | b_ANCC_med (cluster) | visible_ratio | mean abs | std | max |
+|---|---|---:|---:|---:|---:|
+| 000d7d20 | 11373 (cluster 37) | 27% | 1.49 | 1.10 | 5.31 |
+| **00bbac68** | **11855 (cluster 52)** | **20%** | **3.91** | **2.73** | **10.78** |
+| 00e12e8b | 11373 (cluster 37) | 33% | 2.52 | 1.43 | 6.36 |
+
+= **00bbac68 で圧倒的に外している** (= mean abs 3.91 ft、 max 10.78 ft)。 これは F1 finding (= 00bbac68 は b_cluster 11855 = train minority、 visible_ratio 20% = 最難 well) と完全に整合する **data evidence**。
+
+**数理的含意 (= 重要)**:
+- LB 9.957 → 9.728 = -0.229 ft 改善必要
+- 14151 rows のうち 00bbac68 = 6014 rows (= 42.5%)、 mean abs 3.91 ft
+- 仮に 00bbac68 で Top10 並みに予測できれば、 全体 OOF RMSE は √((6014 × 0² + 8137 × 1.5²) / 14151) ≈ 1.13 ft (= simplification、 実際は y_diff 2 乗の平均)
+- = **LB lift は 00bbac68 への集中投資で大幅可能**
+
+**戦略仮説 (= 優勝路手法 D Per-Well MoE の data evidence)**:
+- 00bbac68 (= b_cluster 11855) は train で minority (= 11855 cluster の train wells は少数、 学習データ不足)
+- LGB / Ridge は majority cluster (= 11373) を well 学習、 minority (= 11855) を under-fit
+- = **per-well or per-cluster MoE wrapper** が直接効く paradigm
+- 具体的: `gate(visible_ratio, b_cluster) → expert_for_low_visibility_minority_cluster` を追加すれば 00bbac68 で大幅 lift
+
+これは次タスク (= 優勝路手法 D) の **データ駆動 motivation**。 「軽さ-driven」 ではなく **「数理本質に基づく LB lift path」** = 優勝本質性 §11.1 ✅ 採用。
+
 ---
 
 ## 2. 未 audit dataset (= 次タスクで個別 audit)
