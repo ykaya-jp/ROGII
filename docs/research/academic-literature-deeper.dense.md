@@ -50,7 +50,19 @@
 - Lithology classification: 74.13% → 78.10%
 - Curve reconstruction、boundary detection の clustering analysis でも層認識能力を確認
 
-**code/weights**: **公開 repo URL は abstract に明記なし**。CC-BY 4.0 だが「weights public availability」は要確認
+**実装 detail (= HTML v1 https://arxiv.org/html/2509.18152v1 で追加判明)**:
+- **Tokenizer**: vector quantization (VQ) with learnable codebook $\mathcal{E} = \{e_k\}_{k=1}^K$、 curve は per-well z-score 正規化、 patch (length L, stride s)。 K / d / β / L / s の具体値は paper の "experimental setup" section 内で開示 (= HTML excerpt には未掲載、 supplementary PDF 必要)
+- **Encoder**: depthwise separable convolutions with residual + Transformer。 curve-type embedding + relative-depth positional encoding (= patch の絶対 depth ではなく formation top からの相対 depth で encode)
+- **Masking strategy**: **block-wise masking along depth with ratio r** (= contiguous block で mask、 random per-token ではない) → **ROGII の hidden block (= visible 末端から末端 70%) と同じ pattern ★**。 これは PatchTST の random 40% mask とは挙動が異なる
+- **Contrastive loss (SCL eq.4)**:
+$$
+\mathcal{L}_{\text{SCL}} = -\log \frac{\exp(\text{sim}(z_i, z_j^+)/\tau)}{\sum_k \exp(\text{sim}(z_i, z_k)/\tau)}
+$$
+sim は cosine 類似度、 positive pair は **cross-well で相対 depth alignment + low-freq Pearson > τ_sim** な patch (= 別 well の同層 patch を positive、 異層 patch を negative)
+- **Hardware**: NVIDIA RTX A6000、 batch size 256、 AMP、 throughput **680 ± 8 patches/s** (= 軽量 architecture の証左)
+- **下流 baselines** (= Table 1): CNN / LSTM / CNN-LSTM / Transformer、 WLFM-400/-600/-1200/-Finetune の scale ablation 完備 (= 1200 well で full performance plateau)
+
+**code/weights**: **公開 repo URL は paper にも Semantic Scholar / Google search にも明記なし** (= 2026-05-11 検証)。 著者所属 **USTC** (= 中国科学技術大学、 Yun-Bo Zhao / Wenjun Lv lab、 自動制御系 group)。 paper は CC-BY 4.0 だが weights 公開は別判断。 連絡 email は arXiv abstract page から取得可能 (Zerui Li 氏 corresponding 推定)
 
 **ROGII への適用 path**:
 - **path α (weights 入手 OK の場合)**: Qi et al. の pretrained encoder を private kaggle dataset 化 → ROGII の visible 区間 (GR, Z, X, Y) を patch tokenize → fine-tune で TVT head を取り付ける。**1200 wells pretrain → 773 wells fine-tune** という ratio は few-shot 適合範囲
@@ -73,8 +85,9 @@ WLFM は 2025 後半の新規 work で、先行 well-log foundation model は **
 - **MOMENT** (Goswami 2024, arXiv:2402.03885, https://arxiv.org/abs/2402.03885) — 一般 time series foundation model、HuggingFace で weights 公開、ROGII の GR や Z にそのまま attach 試せる
 - **Lag-Llama** (Rasul 2024, arXiv:2310.08278, https://arxiv.org/abs/2310.08278) — probabilistic time series foundation model
 - **TimesFM** (Das 2024, Google, arXiv:2310.10688, https://arxiv.org/abs/2310.10688) — 200B time-points で pretrain
+- **TimeGPT × Well Logs** (Koeshidayatullah 2024-12, arXiv:2412.05681, https://arxiv.org/abs/2412.05681) — **TimeGPT を well log に zero-shot 適用した実証論文**。 R² 87%、 MAPE 1.95%、 anomaly detection accuracy 93%。 **basin-adaptation 不要 zero-shot で動く** ことを示した最初の paper の 1 つ。 ROGII の transfer 性に直接示唆
 
-**ROGII での即時試行候補**: MOMENT は HF transformers から `transformers.AutoModel.from_pretrained` で attach 可、ROGII の visible 区間に zero-shot で imputation かけて baseline 取れる (= 半日工数)
+**ROGII での即時試行候補**: MOMENT は HF transformers から `transformers.AutoModel.from_pretrained` で attach 可、ROGII の visible 区間に zero-shot で imputation かけて baseline 取れる (= 半日工数)。 TimeGPT は Nixtla の paid API 経由、 **ROGII の 9 hr submission run は外部 API call 禁止** (= kaggle code competition ルール) なので submission には乗らないが、 local ablation の baseline として有用
 
 ### 1.3 ROGII への適用 path + license + 工数 まとめ
 
@@ -93,11 +106,13 @@ WLFM は 2025 後半の新規 work で、先行 well-log foundation model は **
 
 **出典**: Nie et al. "A Time Series is Worth 64 Words: Long-term Forecasting with Transformers" ICLR 2023, arXiv:2211.14730 (https://arxiv.org/abs/2211.14730), GitHub https://github.com/yuqinie98/PatchTST, MIT license
 
-**論文の hyperparameter** (= 公開 README + Nixtla doc 出典: https://nixtlaverse.nixtla.io/neuralforecast/models.patchtst.html):
-- patch_length P = 16, stride S = 8 (= 50% overlap)
+**論文の hyperparameter** (= 公式 repo `yuqinie98/PatchTST/PatchTST_supervised/scripts/PatchTST/ettm1.sh` より、 ETTm1 実験):
+- **patch_length P = 16, stride S = 8** (= 50% overlap、 確認済)
 - look-back L = 336 (短) or 512 (長) → patch 数 N = (L - P) / S + 1 = 41 or 63
 - channel-independent: 各 channel に Transformer を独立適用 + 全 channel で重み共有
-- masked pretrain: 40% mask ratio
+- **d_model=128, n_heads=16, e_layers=3, dropout=0.2, fc_dropout=0.2, head_dropout=0**
+- batch=128, lr=1e-4
+- masked pretrain: **40% mask ratio** (= `patchtst_pretrain.py --mask_ratio 0.4` 確認済)
 
 **ROGII への patch_size 逆算**:
 
@@ -225,10 +240,18 @@ $$
 
 **性能**: 既存 probabilistic imputation 比 **40-65% 改善**、deterministic (SAITS 等) 比 **5-20% 改善** (paper abstract)
 
+**正確な hyperparameter (= `ermongroup/CSDI/config/base.yaml` より)**:
+- diffusion steps **T=50**
+- noise schedule: **quad** (= quadratic、 linear ではない)、 β_start=0.0001、 β_end=0.5
+- 内部 Transformer: channels=64、 layers=4、 heads=8、 diffusion_embedding_dim=128
+- time embedding dim=128、 feature embedding dim=16
+- training: batch=16、 lr=1e-3、 epochs=200
+
 **ROGII への含意**:
 - **uncertainty を持つ TVT 予測** が直接出る (= score sampling で multi-sample → quantile)
 - ROGII の `b_well_resid_std p50=0.008 ft` から std を物理事前として diffusion noise schedule に encode 可
-- **計算 cost**: SAITS より明らかに重い (= 50-1000 step の denoising)。9 hr 推論制約で 776 wells × 50 step = 38800 forward pass。1 forward が 1 sec なら 11 hr で over
+- **正確な計算 cost (= T=50 確定済)**: 776 wells × 50 step ≈ 38800 forward pass。 1 forward 0.05 sec (= 軽量 Transformer 4 layer × A6000 推定) で **1940 sec ≈ 0.54 hr**、 9 hr 制約内
+- ただし **single sample** では uncertainty 取れない (= 1 path しか出ない)、 nsample 10-100 で multi-sample 取ると 5-54 hr で over → **nsample 10 + visible 比率上位 wells のみ subset 推論** が現実的妥協
 
 **9 切り寄与推定**: -0.3〜-0.7 ft (= uncertainty marginalization の理論的 edge)、ただし推論時間制約で **subset 推論 (= unstable wells のみ CSDI、残りは SAITS)** の hybrid 必要
 
@@ -436,6 +459,41 @@ $$
 2. **Step 2**: variogram fitting (= sample variogram + spherical / Gaussian model fit)。GeostatsPy `gamv` 関数で sample variogram、`vmodel` で fit
 3. **Step 3**: test well の (X, Y) に対し **ordinary kriging** で ANCC を推定、同時に kriging variance も得る
 4. **Step 4**: kriging variance を Bayesian posterior の prior precision として下流 model に渡す
+
+**正確な GeostatsPy 関数 signature** (= GeostatsPyDemos_Book https://geostatsguy.github.io/GeostatsPyDemos_Book/GeostatsPy_kriging.html より、 actual code 抜粋):
+
+```python
+# variogram model 構築 (= 異方性 OK、 2 構造まで)
+variogram = GSLIB.make_variogram(
+    nug=0.0,           # nugget effect (= measurement noise variance)
+    nst=1,             # 構造数 (1 or 2)
+    it1=1,             # 1=spherical, 2=exponential, 3=Gaussian
+    cc1=1.0,           # contribution (= sill - nugget)
+    azi1=0.0,          # azimuth (= NE-SW 方向の主軸、 度)
+    hmaj1=5000.0,      # major range (= 主軸方向 correlation length, ft)
+    hmin1=2000.0,      # minor range (= 直交方向 correlation length, ft)
+)
+
+# 2D ordinary kriging
+kmap, vmap = geostats.kb2d(
+    df=df, xcol='X', ycol='Y', vcol='ANCC_top_depth',
+    tmin=-99999, tmax=99999,
+    nx=100, xmn=0.0, xsiz=10.0,    # grid 設定
+    ny=100, ymn=0.0, ysiz=10.0,
+    nxdis=1, nydis=1,              # block discretization (1=point kriging)
+    ndmin=4, ndmax=10,             # 検索 neighbor 最小 / 最大
+    radius=10000.0,                # 検索半径 (ft)
+    ktype=1,                       # 0=simple, 1=ordinary kriging
+    skmean=0.0,                    # ktype=0 のときのみ使用
+    vario=variogram,
+)
+# kmap = kriging estimate, vmap = kriging variance
+```
+
+**ROGII での具体的 fit 戦略**:
+- 6 formations × 773 wells で **per-formation** に variogram fit (= formation 毎に anisotropy が異なる前提)
+- ROGII の (X, Y) は host EDA で normalized 済み (= `data-spec.dense.md`)、 実 ft 単位ではない可能性。 まず raw 単位での variogram range を確認、 必要なら scaling
+- **`ktype=1` (ordinary)** を採用、 train wells の ANCC 全体平均は formation 毎に不明 (= mean stationarity 仮定が破れる)、 ordinary は local mean を local data で推定するため robust
 
 **期待 effect**:
 - 現 KNN k=10 は **等方 weight** (= 全方向同じ)、variogram 流は **anisotropic** (= NE-SW か E-W 方向に layer が長い場合の方位依存)
