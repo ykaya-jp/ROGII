@@ -345,12 +345,66 @@ Sx = np.column_stack([... 9 base ..., top2_ensemble])
 - author F.A.Nina = rank 147/779, LB 10.252 (= nina-03 9.956 とは別 progression、 古い時期の sub 群)
 - 判定: ❌ 全 sub が 10.7+ で我々 9.957 より大幅下位、 採用不要
 
-### 1.7 ★ enisteper1/rogii-train-dataset (= 937 MB、 audit pending)
+### 1.7 ★★ enisteper1/rogii-train-dataset (= 937 MB、 audit 完了)
 
-- author **Enis Teper = rank 54/779、 LB 9.960** ← **我々 rank 53 LB 9.957 と same band**!
-- content: 937 MB train dataset (= 別 train data version の可能性 = paradigm 2 重要 lift candidate)
-- audit: download 進行中、 内容次第で **超 valuable** (= 9.96 band 解法の train data) or feature engineering 流用候補
-- **expected blend benefit ≈ 0** (= aeroridge/nina-03 と同様 corr 0.99+ の可能性高い)、 ただし train data に **我々未実装の features** が含まれれば valuable
+- author **Enis Teper = rank 54/779、 LB 9.960** ← **我々 rank 53 LB 9.957 と same band**
+- content: `train_engineered.parquet` (= 1.21 GB unzipped、 **3,783,989 rows × 121 cols**)
+- **773 unique wells**、 ~4900 rows/well = **augmentation 不在** (= aeroridge とは別 paradigm)
+
+**features 構成 (= 121 cols)**:
+- 基本: well, prediction_id, last_known_tvt, known/hidden_len, frac_hidden, md, z, x, y, gr
+- GR rolling: gr_roll{3,5,11,21,51,151}、 gr_std{5,21}、 gr_min/max{5,21}、 gr_grad/grad2、 gr_lag/lead
+- **fk_*** = 6 formation imputed: fk_ANCC/ASTNU/ASTNL/EGFDU/EGFDL/BUDA + dz variants + **fk_b_well** + fk_min_dist + fk_tvt_formula
+- **★ knn_row_*** features (= **新 paradigm 6 candidate**):
+  * `knn_row_ANCC` = per-row kNN-based ANCC estimate (= 別 well の similar row から推定)
+  * `knn_row_ANCC_dz` = dz delta
+  * `knn_row_ANCC_std` = std (= confidence)
+  * `knn_row_dist` = kNN distance metric
+  * `knn_row_b_well` = b_well estimate from kNN
+  * `knn_row_tvt_pred_delta` = TVT prediction delta
+  * `fk_vs_row_ANCC_diff` = formation imputed kNN vs per-row kNN の delta
+
+**判定 = ★★ paradigm 6 (= per-row kNN inference) 大発見**:
+- aeroridge (= LB 9.916) = paradigm 5 augmentation 採用
+- enisteper (= LB 9.960) = **paradigm 6 = kNN-based per-row features** で 同 band 到達
+- = augmentation vs kNN は **異なる paradigm** が同 LB 9.92-9.96 band を実現
+
+これは「優勝路手法 G (= paradigm 6 per-row kNN inference)」 として新候補化。
+
+**winning path G sketch (= 簡易)**:
+```python
+# 各 row に対し、 別 wells の similar row を kNN で見つけて:
+#   - その row の ANCC / b_well / TVT を「予測値」として持ち込み
+# = per-row prediction の direct refinement
+# 既存 LGB は row level features を使うが、 kNN-based predictions は別 paradigm
+```
+
+期待 LB lift: **-0.05 〜 -0.20 ft** (= enisteper が 9.96 を kNN で達成、 我々の base
+9.957 に inject すれば independent diversity で marginal lift)
+
+---
+
+## 1.8 cumulative finding summary (= 9 dataset audit 後)
+
+| dataset | author LB | rank | paradigm | 採否 | 価値 |
+|---|---:|---:|---|---|---|
+| akshankrithick Top10 | sub only | - | ① transduction | ❌ | diagnostic 用 (= per-row diff、 00bbac68 evidence) |
+| buchananliang Top2 | 10.463 | 205 | ② GBM artifacts | ❌ | 我々下位、 features.json は ablation 用 |
+| alfaxa LGBM | 10.561 | 224 | ② LGB + simple blend | ❌ | rogii_infer_runtime.py 読解 + b_well_last 11% 寄与 finding |
+| nina-03 (9.956 sub) | 9.956 | 147 | ① sub blend | ❌ | corr 0.9999 = blend benefit ゼロ |
+| **aeroridge** | **9.916** | **36** | **⑤ augmentation** | **★ 採用候補** | **paradigm 5 新発見、 winning path F** |
+| innerf1re | 10.369 | 175 | ① | ❌ | 下位 |
+| iathar | 34.07 | 691 | ② broken | ❌ | author 未収束 |
+| geeknik | 10.782 | 256 | ① | ❌ | 下位 |
+| nina-07 | 10.252 | 147 | ① 古 sub | ❌ | LB 10.7+ |
+| **enisteper** | **9.960** | **54** | **⑥ kNN per-row** | **★★ 採用候補** | **paradigm 6 新発見、 winning path G** |
+
+**戦略決定 (= cumulative)**:
+- paradigm 1-4 (= 既存 4) + paradigm 5 augmentation (= aeroridge) + paradigm 6 kNN (= enisteper) = **6 paradigm** が ROGII で identified
+- 我々 9-base は paradigm 1+2+3 mix (= 4 paradigm 中 3 個踏み)
+- 真の LB lift には paradigm 5 + 6 取り込みが必要 = **winning path F + G**
+- これらは公開 dataset で「数理本質」 が確認できる = **「他人解法 import」 ではなく「同 paradigm の self-compile」** で OK
+- = 優勝本質性 ✅ 採用、 軽さ-driven ではない
 
 ---
 
