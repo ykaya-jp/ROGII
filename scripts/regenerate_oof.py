@@ -105,15 +105,26 @@ def kernel_patch_cv_strategy(kernel_path: Path, cv_strategy: str, fold_dataset: 
     return header + src
 
 
-def kernel_patch_metadata(metadata_path: Path, exp: str, cv_strategy: str, fold_dataset: str) -> dict:
-    """Return patched kernel-metadata.json with title/id updated + fold dataset attached."""
+def kernel_patch_metadata(
+    metadata_path: Path,
+    exp: str,
+    cv_strategy: str,
+    fold_dataset: str,
+    retry_suffix: str = "",
+) -> dict:
+    """Return patched kernel-metadata.json with title/id updated + fold dataset attached.
+
+    retry_suffix: appended to id and title to bypass Kaggle "Notebook not found"
+        ghost-slug errors (= when a prior push partially-registered the kernel,
+        same slug re-push fails). Use e.g. "-r2" or "-r3" to force a new slug.
+    """
     meta = json.loads(metadata_path.read_text())
     base_title = meta.get("title", exp)
     base_id = meta.get("id", f"ky7240/{exp.replace('_', '-')}")
     user_prefix, kernel_slug = base_id.split("/", 1)
-    suffix = f"-cv-{cv_strategy.lower()}"
+    suffix = f"-cv-{cv_strategy.lower()}{retry_suffix.lower()}"
     new_id = f"{user_prefix}/{kernel_slug}{suffix}"
-    new_title = f"{base_title} [CV={cv_strategy}]"
+    new_title = f"{base_title} [CV={cv_strategy}{retry_suffix.upper()}]"
     meta["id"] = new_id
     meta["title"] = new_title
     sources = list(meta.get("dataset_sources", []))
@@ -175,8 +186,8 @@ def download_kernel_output(kernel_id: str, dest_dir: Path) -> int:
 # ────────────────────────────────────────────────────────────────────────────
 
 
-def run_one(exp: str, cv: str, fold_dataset: str, dry_run: bool, parallel_push: bool) -> dict:
-    print(f"\n== exp={exp}  cv={cv} ==")
+def run_one(exp: str, cv: str, fold_dataset: str, dry_run: bool, parallel_push: bool, retry_suffix: str = "") -> dict:
+    print(f"\n== exp={exp}  cv={cv}  retry={retry_suffix!r} ==")
     kernel_dir = KERNELS_DIR / exp
     kernel_py = kernel_dir / f"{exp}.py"
     kernel_meta = kernel_dir / "kernel-metadata.json"
@@ -186,12 +197,12 @@ def run_one(exp: str, cv: str, fold_dataset: str, dry_run: bool, parallel_push: 
         return {"exp": exp, "cv": cv, "status": "MISSING_METADATA", "kernel": str(kernel_meta)}
 
     # Build working copy
-    work_dir = REPO_ROOT / ".work" / "regenerate_oof" / f"{exp}__cv-{cv}"
+    work_dir = REPO_ROOT / ".work" / "regenerate_oof" / f"{exp}__cv-{cv}{retry_suffix}"
     if work_dir.exists():
         shutil.rmtree(work_dir)
     work_dir.mkdir(parents=True, exist_ok=True)
     patched_py = kernel_patch_cv_strategy(kernel_py, cv, fold_dataset)
-    patched_meta = kernel_patch_metadata(kernel_meta, exp, cv, fold_dataset)
+    patched_meta = kernel_patch_metadata(kernel_meta, exp, cv, fold_dataset, retry_suffix=retry_suffix)
     (work_dir / f"{exp}.py").write_text(patched_py)
     (work_dir / "kernel-metadata.json").write_text(json.dumps(patched_meta, indent=2))
     new_kernel_id = patched_meta["id"]
@@ -231,6 +242,9 @@ def main() -> None:
                         help="Push all kernels without waiting for COMPLETE between pushes")
     parser.add_argument("--fold-dataset", default=DEFAULT_FOLD_DATASET,
                         help=f"Kaggle dataset slug containing fold parquets (default: {DEFAULT_FOLD_DATASET})")
+    parser.add_argument("--retry-suffix", default="",
+                        help="Suffix appended to kernel id/title to bypass Kaggle "
+                             "ghost-slug errors (e.g. '-r2'). Empty by default.")
     args = parser.parse_args()
 
     if args.all:
@@ -244,7 +258,7 @@ def main() -> None:
     results: list[dict] = []
     t0 = time.perf_counter()
     for exp, cv in pairs:
-        r = run_one(exp, cv, args.fold_dataset, args.dry_run, args.parallel_push)
+        r = run_one(exp, cv, args.fold_dataset, args.dry_run, args.parallel_push, args.retry_suffix)
         results.append(r)
 
     elapsed = time.perf_counter() - t0
