@@ -207,15 +207,24 @@ Jensen lower bound 改善:
 
 本タスク (= cv-strategies-2026-05-11) が確定する **最良 CV を基準** に、 優勝路手法 A-E の CV 改善を測定する。
 
-### 5.2 検証対象 (= 5 候補、 deepest EDA + GM mindset 由来)
+### 5.2 検証対象 (= **6 候補**、 deepest EDA + GM mindset + public source audit 由来)
 
-| ラベル | 戦略 | 期待 CV 改善 (vs exp008 v2 baseline) | paradigm | compute |
+| ラベル | 戦略 | 期待 LB lift (vs 9.957) | paradigm | compute |
 |---|---|---|---|---|
 | **A** | **GPU NN sequence model 追加** (= Mamba / Transformer / 1D-CNN on GR+dTVT) | -0.3 〜 -0.6 ft | ② 自前 compiler/solver 拡張 | GPU 必須、 5-10 hr/run |
-| **B** | **deepest EDA D1 + D4 + D9 を LGB stack に添加** (= b_well 67 cluster ID + b_jump_max_abs + 6 formation top per-well median) | -0.4 〜 -0.9 ft | ③ force/hand-craft (= 公開上位未使用 path) | CPU 0.5-1 hr/run |
+| **B** | **deepest EDA D1 + D4 + D9 を LGB stack に添加** (= b_well 67 cluster ID + b_jump_max_abs + 6 formation top per-well median、 src 統合済) | -0.1 〜 -0.4 ft | ③ force/hand-craft (= 公開上位未使用 path) | CPU 0.5-1 hr/run |
 | **C** | **Sparse GP M=200 → M=500-1000** + posterior variance 明示注入 | -0.2 〜 -0.5 ft | ② 既存 GP 強化 | GPU 3-5 hr/run |
-| **D** | **Per-Well MoE wrapper** (= visible_ratio / b_cluster で per-well 専用 expert + gating blend) | -0.3 〜 -0.5 ft | ② 構造変更 (= 単一 model → MoE) | CPU 1-2 hr/run |
-| **E** | **LLM-driven posterior synthesis** (= Claude / GPT で per-test-well 推論 + ANCC 復元 program synthesis) | ?? (= 0 〜 -1.0 ft) | ④ **新規 paradigm** (= ROGII 前例なし) | CPU 0.5 day prototype |
+| **D** | **Per-Well MoE wrapper** (= visible_ratio / b_cluster で per-well 専用 expert) **★ 00bbac68 data evidence 駆動** | -0.3 〜 -0.5 ft | ② 構造変更 (= 単一 model → MoE) | CPU 1-2 hr/run |
+| **E** | **LLM-driven posterior synthesis** (= Claude / GPT で per-test-well 推論 + ANCC 復元) | ?? (= 0 〜 -1.0 ft) | ④ 新規 paradigm | CPU 0.5 day prototype |
+| **F** | **★ Data augmentation** (= visible_ratio random masking × 6 augmented samples/well) **★ aeroridge LB 9.916 evidence 駆動** | -0.05 〜 -0.20 ft | ⑤ **paradigm 5 新発見** (= aug_k schema 発見) | GPU 推奨 3-6 hr/run |
+
+詳細 sketch:
+- A: `docs/research/2026-05-11-winning-path-A-nn-sketch.dense.md`
+- D: `docs/research/2026-05-11-winning-path-D-moe-sketch.dense.md`
+- F: `docs/research/2026-05-11-winning-path-F-augmentation-sketch.dense.md`
+- B: src/rogii/features.py に実装済 (= compute_b_well_cluster_id, compute_b_jump_max_abs, compute_formation_top_medians + 20/20 PASS unit test)
+- C: 詳細 sketch 未 (= 次タスクで起草、 既存 exp009 v2 Sparse GP の M 拡張で軽量)
+- E: 詳細 sketch 未 (= LLM prototype は 0.5 day で start 可能)
 
 ### 5.3 検証順序 (= 数理的優先度)
 
