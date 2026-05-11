@@ -121,7 +121,7 @@ def build_features(
         print(f"[build] train wells={len(train_args)}  test wells={len(test_args)}", flush=True)
 
     t0 = time.perf_counter()
-    train_res = Parallel(n_jobs=n_jobs, prefer="threads", verbose=0)(
+    train_res = Parallel(n_jobs=n_jobs, backend="loky", verbose=10)(
         delayed(build_well)(hp, tp, True, fi, di, cluster_map, use_self_exclusion) for hp, tp in train_args
     )
     train_parts = [r for r in train_res if r is not None]
@@ -133,7 +133,7 @@ def build_features(
         )
 
     t0 = time.perf_counter()
-    test_res = Parallel(n_jobs=n_jobs, prefer="threads", verbose=0)(
+    test_res = Parallel(n_jobs=n_jobs, backend="loky", verbose=5)(
         delayed(build_well)(hp, tp, False, fi, di, cluster_map, False) for hp, tp in test_args
     )
     test_parts = [r for r in test_res if r is not None]
