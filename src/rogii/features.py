@@ -434,25 +434,33 @@ FEATURE_COLS_V3 = feature_columns(
 def compute_b_well_cluster_id(
     well_ids: "Iterable[str]",  # type: ignore[name-defined]
     b_cluster_parquet: "Any" = None,  # type: ignore[name-defined]
-    round_to: int = 2,
+    round_to: int = 3,
 ) -> "dict[str, int]":
     """Return ``{well_id: cluster_id_int}`` from deepest EDA b_ANCC_med.
 
-    D1 (= deepest EDA finding §3.1): the 773 train + 3 test wells collapse
-    into **67 unique b_well clusters** identified by the per-well median
-    of b_ANCC_med (= TVT - Z - ANCC). Public top kernels treat b_well as
-    continuous; this categorical view is the structural lift documented as
-    "expected LB contribution -0.2 〜 -0.5 ft" in the design doc.
+    D1 (= deepest EDA finding §3.1): the 773 train wells collapse into
+    **67 unique b_well clusters** at 0.001 ft rounding (= deepest EDA's
+    own setting). Empirical sensitivity:
+
+        round_to=0 (raw float):  87 unique  (= float accumulation noise)
+        round_to=1 (0.1 ft):     55 unique  (= over-merged)
+        round_to=2 (0.01 ft):    66 unique  (= 1 borderline pair merges)
+        round_to=3 (0.001 ft):   67 unique  ← default, matches deepest EDA
+        round_to=4 (0.0001 ft):  67 unique  (= same equivalence classes)
+
+    Public top kernels treat b_well as continuous; this categorical view
+    is the structural lift documented as "expected LB contribution
+    -0.2 〜 -0.5 ft" in the design doc.
 
     Args:
         well_ids: train + test well_ids whose cluster IDs are needed.
         b_cluster_parquet: path to b-cluster-xy.parquet (defaults to the
             standard deepest EDA output location).
         round_to: decimals to round the raw b_ANCC_med value before using
-            it as a cluster key. Default 2 = 0.01 ft (= TVT native step,
-            see deepest EDA F-D3 quantization finding). Use 0 only when
-            you want raw float identity (= floating-point precision noise
-            can fragment expected clusters, e.g. 11373.26 vs 11373.27).
+            it as a cluster key. Default 3 reproduces the canonical 67
+            cluster snapshot from deepest EDA §3.1. Use 2 for the
+            quantization-aware variant (= 66 clusters under F-D3 TVT
+            native 0.01 ft step).
 
     Returns:
         Mapping ``well_id`` → integer cluster_id (0..n_clusters-1). Stable
