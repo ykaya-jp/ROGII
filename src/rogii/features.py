@@ -423,3 +423,87 @@ FEATURE_COLS = feature_columns(formation_avail=True)
 FEATURE_COLS_V3 = feature_columns(
     formation_avail=True, typewell_avail=True, wls_avail=True
 )
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# deepest EDA D1 — b_well 67 cluster ID (= categorical wellbore zone fingerprint)
+# task: kaggle-rogii-winning-candidates-cv-test-2026-05-12 (= 次タスク 優勝路手法 B)
+# ────────────────────────────────────────────────────────────────────────────
+
+
+def compute_b_well_cluster_id(
+    well_ids: "Iterable[str]",  # type: ignore[name-defined]
+    b_cluster_parquet: "Any" = None,  # type: ignore[name-defined]
+    round_to: int = 2,
+) -> "dict[str, int]":
+    """Return ``{well_id: cluster_id_int}`` from deepest EDA b_ANCC_med.
+
+    D1 (= deepest EDA finding §3.1): the 773 train + 3 test wells collapse
+    into **67 unique b_well clusters** identified by the per-well median
+    of b_ANCC_med (= TVT - Z - ANCC). Public top kernels treat b_well as
+    continuous; this categorical view is the structural lift documented as
+    "expected LB contribution -0.2 〜 -0.5 ft" in the design doc.
+
+    Args:
+        well_ids: train + test well_ids whose cluster IDs are needed.
+        b_cluster_parquet: path to b-cluster-xy.parquet (defaults to the
+            standard deepest EDA output location).
+        round_to: decimals to round the raw b_ANCC_med value before using
+            it as a cluster key. Default 2 = 0.01 ft (= TVT native step,
+            see deepest EDA F-D3 quantization finding). Use 0 only when
+            you want raw float identity (= floating-point precision noise
+            can fragment expected clusters, e.g. 11373.26 vs 11373.27).
+
+    Returns:
+        Mapping ``well_id`` → integer cluster_id (0..n_clusters-1). Stable
+        across calls thanks to ``sorted`` over unique values. Missing wells
+        get cluster_id = -1.
+    """
+    import numpy as _np
+    import pandas as _pd
+    from pathlib import Path as _Path
+
+    if b_cluster_parquet is None:
+        b_cluster_parquet = _Path("outputs/eda/deepest_eda/b-cluster-xy.parquet")
+    b_cluster_parquet = _Path(b_cluster_parquet)
+    if not b_cluster_parquet.exists():
+        # graceful: caller can also fall back to per-well-stats.parquet b_well_mean
+        return {str(wid): -1 for wid in well_ids}
+
+    df = _pd.read_parquet(b_cluster_parquet)[["well_id", "b_ANCC_med"]]
+    df = df.drop_duplicates(subset=["well_id"]).copy()
+    if round_to > 0:
+        df["b_key"] = df["b_ANCC_med"].round(round_to)
+    else:
+        df["b_key"] = df["b_ANCC_med"]
+    # Stable integer encoding via sort
+    unique_keys = sorted(df["b_key"].dropna().unique().tolist())
+    key_to_int = {k: i for i, k in enumerate(unique_keys)}
+    df["cluster_id"] = df["b_key"].map(key_to_int).fillna(-1).astype(int)
+    lookup = dict(zip(df["well_id"].astype(str), df["cluster_id"]))
+    return {str(wid): int(lookup.get(str(wid), -1)) for wid in well_ids}
+
+
+def is_test_cluster(
+    well_ids: "Iterable[str]",  # type: ignore[name-defined]
+    test_wells: "tuple[str, ...]" = ("000d7d20", "00bbac68", "00e12e8b"),  # type: ignore[name-defined]
+    b_cluster_parquet: "Any" = None,  # type: ignore[name-defined]
+) -> "dict[str, int]":
+    """Return ``{well_id: 0|1}`` where 1 marks wells in the same b_cluster
+    as any of the 3 test wells.
+
+    F1 finding: test wells fall in only 2 b_clusters (11373 × 2 wells,
+    11855 × 1 well). 1 here means "this train well shares its b_cluster
+    with at least one test well" — a useful binary feature for any
+    per-well-stratified pipeline and for ablation of test-similar wells.
+    """
+    cluster_lookup = compute_b_well_cluster_id(
+        list(set(list(well_ids) + list(test_wells))),
+        b_cluster_parquet=b_cluster_parquet,
+    )
+    test_clusters = {cluster_lookup.get(str(w), -1) for w in test_wells}
+    test_clusters.discard(-1)
+    return {
+        str(wid): int(cluster_lookup.get(str(wid), -1) in test_clusters)
+        for wid in well_ids
+    }
