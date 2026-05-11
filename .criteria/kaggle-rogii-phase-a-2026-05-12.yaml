@@ -1,0 +1,148 @@
+task_id: kaggle-rogii-phase-a-2026-05-12
+title: "Phase A — 金メダル確保 (LB ≤ 9.5、 Hill Climb 9.43 接近)"
+context: |
+  ROGII Wellbore Geology Prediction で user は LB 9.738 / rank 17/779 (Silver 高位)。
+  公開 NB Hill Climb (Roman Tarasov、 LB 9.43) に -0.29 ft 抜かれている。
+  Phase A は post-proc + 公開 NB の核心技術を自前再実装、 LB ≤ 9.5 を機械的に判定する。
+  期待累積 lift: -0.30 〜 -0.80 ft (= 9.738 → 9.0-9.4 帯)。
+
+  plan source:
+    - /home/yusuke_kaya/.claude/plans/floating-cuddling-haven.md §5.1
+    - /home/yusuke_kaya/projects/kaggle/ROGII/docs/dev/2026-05-12-plan-gold-to-winning.dense.md (= 本 plan の repo copy)
+
+  base submission:
+    - exp009 v2: LB 9.738 (= 5/11 05:37 SCORED、 base = karnakbaev 5 + 自前 4 + 案 D Kalman + 案 E Sparse GP M=200 + Edge S + Edge O + Ridge meta positive)
+
+  parent task: kaggle-rogii-cv-strategies-2026-05-11 (= AC-7 CV-LB correlation を継承)
+
+acceptance_criteria:
+  - id: AC-A1-pending-result-collection
+    description: "exp010/exp013/exp015 の Kaggle submit を完了させ、 LB / OOF / CV-LB gap を docs/research/2026-05-12-submission-analyses.md に append"
+    kind: manual_review
+    rubric:
+      - "exp010 が Kaggle で SubmissionStatus.COMPLETE になっている"
+      - "exp013 が Kaggle で SubmissionStatus.COMPLETE になっている"
+      - "exp015 が Kaggle で SubmissionStatus.COMPLETE になっている"
+      - "各 exp の LB 公開値が docs/dev/leaderboard.dense.md に記録されている"
+      - "各 exp について GM §8 schema (= per-task source diff + effect isolate + 仮説帰納 + roadmap refine) で docs/research/2026-05-12-submission-analyses.md に append"
+
+  - id: AC-A3-numba-beam-plus2
+    description: "Numba JIT Beam ±2 + dense O(1) PF grid を src/rogii/beam_pf_numba.py で実装し、 単独 lift を ablation で実測"
+    kind: test_pass
+    rubric:
+      - "src/rogii/beam_pf_numba.py が存在し、 beam_search_pm2(...) と pf_dense_grid(...) を export する"
+      - "tests/test_beam_pf_numba.py が pytest で pass (= ±1 既存実装と ±2 拡張の数値整合性 + Numba speedup ≥ 5x)"
+      - "exp009 v2 base + A3 単独 submit の LB 結果が docs/research/2026-05-12-submission-analyses.md に AB 比較として記録 (= |LB_with_A3 - 9.738| を計測)"
+
+  - id: AC-A4-segment-bwell
+    description: "well 内を data-driven boundary で early/mid/late/wls phase に分割し、 per-phase b_well を計算 (= hard-coded boundary 禁止)"
+    kind: test_pass
+    rubric:
+      - "src/rogii/features.py に segment_bwell_per_formation(...) 関数追加、 phase boundary は GR / Z trend の change-point detection で導出"
+      - "tests/test_segment_bwell.py で boundary が data-driven (= 全 well 一律 hard-coded 値ではない) ことを assert"
+      - "exp009 v2 + A3 base に A4 単独 add submit の LB 結果を AB 比較記録"
+
+  - id: AC-A5-softmax-ncc
+    description: "既存 Self-NCC に softmax normalize 層追加、 multi-scale NCC を score-weighted で combine"
+    kind: test_pass
+    rubric:
+      - "src/rogii/features.py に softmax_weighted_ncc(...) 関数追加"
+      - "tests/test_softmax_ncc.py で softmax 正規化後の sum(weights) == 1.0 を assert (= numerical stability check)"
+      - "exp009 v2 + A3 + A4 base に A5 単独 add submit の LB 結果を AB 比較記録"
+
+  - id: AC-A6-3axis-postproc
+    description: "既存 alpha × tau 2-axis に w_pf axis 追加、 Savitzky-Golay smoothing (window=17, poly=3) を最終 stage で適用"
+    kind: test_pass
+    rubric:
+      - "src/rogii/submit.py に postproc_3axis(...) 関数追加 (= grid search over alpha × tau × w_pf)"
+      - "tests/test_postproc_3axis.py で SG smoothing 後の predictions が連続性確認 (= 隣接行の diff max ≤ 既存比 1.5x)"
+      - "exp009 v2 + A3-A5 base に A6 単独 add submit の LB 結果を AB 比較記録"
+
+  - id: AC-A2-hill-climb-weight-opt
+    description: "Hill Climb weight optimization を src/rogii/hill_climb.py で自前再実装、 A3-A6 完了後の 9-base に exhaustive weight sweep"
+    kind: test_pass
+    rubric:
+      - "src/rogii/hill_climb.py に Climber class 自前再実装、 fit(oof_matrix, y_true) + predict(test_matrix) を export"
+      - "tests/test_hill_climb.py で convergence check + weight non-negativity assert"
+      - "exp009 v2 + A3-A6 base に A2 add submit の LB 結果を AB 比較記録"
+
+  - id: AC-A-integrated-submit
+    description: "A2-A6 全統合 kernel を Kaggle submit、 LB ≤ 9.5 を達成"
+    kind: metric_threshold
+    metric: kaggle_lb_public
+    threshold: 9.5
+    direction: lte
+    rubric:
+      - "新 kernel kaggle_kernels/exp016_phase_a_integrated/ で全実装を統合"
+      - "Kaggle submit が SubmissionStatus.COMPLETE で public LB ≤ 9.5 ft"
+      - "submission-analyses.md に統合 sub の分解 entry append (= 各 A3-A6+A2 component の真効果)"
+
+  - id: AC-A-cv-lb-spearman
+    description: "CV-LB Spearman 相関 ≥ 0.7 を C2.v2 stratified Edge Q fold で確認"
+    kind: metric_threshold
+    metric: cv_lb_spearman
+    threshold: 0.7
+    direction: gte
+    rubric:
+      - "AC-A3 / A4 / A5 / A6 / A2 単独 submit の OOF と LB を docs/dev/leaderboard.dense.md CV-LB Diff table に記録"
+      - "5 件以上の OOF/LB ペアで Spearman 相関 ≥ 0.7"
+
+  - id: AC-A-shake-up-proxy
+    description: "C1 fold 0 (= 140 wells LB-proxy) の OOF RMSE と LB 公開値の |差| ≤ 0.2 ft"
+    kind: metric_threshold
+    metric: abs_diff_c1_fold0_oof_vs_lb
+    threshold: 0.2
+    direction: lte
+    rubric:
+      - "C1 fold 0 (= test-similar 140 wells) の OOF を統合 submit について計算"
+      - "OOF RMSE と Kaggle public LB の |差| が 0.2 ft 以内"
+
+manual_review:
+  - rubric: "数理本質性 (~/projects/kaggle/CLAUDE.md §11) check"
+    items:
+      - "A3 ±2 拡張は単独 lift が ablation で +Δ 確認できる (= LGB+XGB の同時投入と区別)"
+      - "A2 Hill Climb 自前実装は artifact 直 ingest していない (= self-compiled 75%+ 維持)"
+      - "全 A3-A6 + A2 の lift が線形加算でないことを ensemble OOF correlation 第一主成分 variance ratio で実測"
+
+  - rubric: "GM mindset §8 形名参同 check"
+    items:
+      - "各 submit 後 30 分以内に docs/research/2026-05-12-submission-analyses.md に append"
+      - "per-task source diff (= 全件、 score delta 上下 10 件) を記録"
+      - "effect isolate (= 各変更 source の真効果) を記録"
+      - "仮説帰納 (= 予測 vs actual 乖離) を記録"
+
+  - rubric: "compute / submit quota check"
+    items:
+      - "submit quota 5/day を Phase A 期間で超過していない (= Phase A 期間 7 day × 5 = 35 submit 上限)"
+      - "Kaggle GPU quota 30h/week を超過していない"
+
+dependencies_dag:
+  - "AC-A1 (independent、 PENDING 待ち)"
+  - "AC-A3 (independent、 src/rogii/tysig.py 既存 beam_search 拡張)"
+  - "AC-A4 (depends on AC-A3 完了)"
+  - "AC-A5 (depends on AC-A3 完了)"
+  - "AC-A6 (depends on AC-A4 + AC-A5 完了)"
+  - "AC-A2 (depends on AC-A6 完了、 weight space 拡張のため最後)"
+  - "AC-A-integrated-submit (depends on AC-A2 + AC-A3 + AC-A4 + AC-A5 + AC-A6)"
+  - "AC-A-cv-lb-spearman (depends on AC-A3-A2 各 ablation submit)"
+  - "AC-A-shake-up-proxy (depends on AC-A-integrated-submit)"
+
+verification_command: |
+  cd /home/yusuke_kaya/projects/kaggle/ROGII && \
+  python tools/verify_criteria.py .criteria/kaggle-rogii-phase-a-2026-05-12.yaml
+
+related_artifacts:
+  - docs/research/2026-05-12-submission-analyses.md
+  - docs/dev/2026-05-12-plan-gold-to-winning.dense.md
+  - docs/dev/leaderboard.dense.md
+  - docs/dev/submission-postmortems.dense.md
+  - src/rogii/beam_pf_numba.py
+  - src/rogii/hill_climb.py
+  - src/rogii/features.py (modify)
+  - src/rogii/submit.py (modify)
+  - kaggle_kernels/exp016_phase_a_integrated/
+
+owners:
+  plan: main-agent
+  implement: main-agent (+ subagent dispatch ok per ~/.claude/rules/agents.md)
+  verify: reviewer subagent (via /verify skill)
