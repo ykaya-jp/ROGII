@@ -98,7 +98,8 @@ def kernel_patch_cv_strategy(kernel_path: Path, cv_strategy: str, fold_dataset: 
         f'# ============================================================\n'
         f'import os as _cv_strat_os\n'
         f'_cv_strat_os.environ["FOLD_OVERRIDE_PARQUET"] = "{fold_path_in_kernel}"\n'
-        f'print(f"[CV-override] strategy={cv_strategy!r} parquet={{_cv_strat_os.environ[\\"FOLD_OVERRIDE_PARQUET\\"]!r}}")\n'
+        f'print("[CV-override] strategy={cv_strategy} parquet=" '
+        f'+ repr(_cv_strat_os.environ["FOLD_OVERRIDE_PARQUET"]))\n'
         f'\n'
     )
     return header + src
