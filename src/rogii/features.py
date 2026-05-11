@@ -507,3 +507,97 @@ def is_test_cluster(
         str(wid): int(cluster_lookup.get(str(wid), -1) in test_clusters)
         for wid in well_ids
     }
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# deepest EDA D4 — b_jump_max_abs (= per-row 6-formation b std)
+# ────────────────────────────────────────────────────────────────────────────
+
+
+def compute_b_jump_max_abs(
+    well_ids: "Iterable[str]",  # type: ignore[name-defined]
+    high_order_parquet: "Any" = None,  # type: ignore[name-defined]
+) -> "dict[str, float]":
+    """Return ``{well_id: b_jump_max_abs}`` for D4 feature.
+
+    D4 (= deepest EDA §1.4): per-well std of the 6 formation b values
+    (= ANCC, ASTNU, ASTNL, EGFDU, EGFDL, BUDA). Higher std = larger
+    formation-to-formation discrepancy = harder TVT extrapolation. Has
+    Spearman 0.40 vs formula_rmse (= second-strongest predictor after
+    visible_ratio) and is the natural MoE gate signal.
+
+    Output: float (b_jump_max_abs) or NaN if the well is not in the parquet.
+    """
+    import pandas as _pd
+    from pathlib import Path as _Path
+
+    if high_order_parquet is None:
+        high_order_parquet = _Path(
+            "outputs/eda/deepest_eda/per-well-high-order.parquet"
+        )
+    high_order_parquet = _Path(high_order_parquet)
+    if not high_order_parquet.exists():
+        return {str(wid): float("nan") for wid in well_ids}
+
+    df = _pd.read_parquet(high_order_parquet)
+    if "b_jump_max_abs" not in df.columns:
+        return {str(wid): float("nan") for wid in well_ids}
+    df = df[["well_id", "b_jump_max_abs"]].drop_duplicates(subset=["well_id"])
+    lookup = dict(
+        zip(df["well_id"].astype(str), df["b_jump_max_abs"].astype(float))
+    )
+    return {str(wid): float(lookup.get(str(wid), float("nan"))) for wid in well_ids}
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# deepest EDA D9 — 6 formation top per-well median
+# ────────────────────────────────────────────────────────────────────────────
+
+
+def compute_formation_top_medians(
+    well_ids: "Iterable[str]",  # type: ignore[name-defined]
+    formation_uniqueness_parquet: "Any" = None,  # type: ignore[name-defined]
+) -> "dict[str, dict[str, float]]":
+    """Return ``{well_id: {"top_ANCC_med": ..., ...}}`` for D9 feature group.
+
+    D9 (= deepest EDA §3.7): each of the 6 formation top depths is unique
+    per well at 0.01 ft precision. The per-well median over rows of each
+    of (top_ANCC_med, top_ASTNU_med, top_ASTNL_med, top_EGFDU_med,
+    top_EGFDL_med, top_BUDA_med) is a 6-dim fingerprint that public top
+    kernels only use via ``bw_{fn}`` (= partial coverage).
+
+    Output: nested dict ``{well_id: {col_name: float}}``. Missing wells
+    or columns become NaN.
+    """
+    import pandas as _pd
+    from pathlib import Path as _Path
+
+    if formation_uniqueness_parquet is None:
+        formation_uniqueness_parquet = _Path(
+            "outputs/eda/deepest_eda/formation-uniqueness.parquet"
+        )
+    formation_uniqueness_parquet = _Path(formation_uniqueness_parquet)
+    cols_wanted = (
+        "top_ANCC_med", "top_ASTNU_med", "top_ASTNL_med",
+        "top_EGFDU_med", "top_EGFDL_med", "top_BUDA_med",
+    )
+    if not formation_uniqueness_parquet.exists():
+        return {str(wid): {c: float("nan") for c in cols_wanted} for wid in well_ids}
+
+    df = _pd.read_parquet(formation_uniqueness_parquet)
+    keep = ["well_id"] + [c for c in cols_wanted if c in df.columns]
+    df = df[keep].drop_duplicates(subset=["well_id"])
+    df["well_id"] = df["well_id"].astype(str)
+    df.set_index("well_id", inplace=True)
+    result: "dict[str, dict[str, float]]" = {}
+    for wid in well_ids:
+        wid_s = str(wid)
+        if wid_s in df.index:
+            row = df.loc[wid_s]
+            result[wid_s] = {
+                c: float(row[c]) if c in row.index else float("nan")
+                for c in cols_wanted
+            }
+        else:
+            result[wid_s] = {c: float("nan") for c in cols_wanted}
+    return result
