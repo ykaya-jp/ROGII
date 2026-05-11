@@ -3032,6 +3032,36 @@ elif MODE == "infer_edge_qm":
                      f"{dict(zip(stack_keys, np.round(wts, 4)))}")
             own_total_w = float(sum(wts[len(ACTIVE_MODELS):]))
             log.info(f"  own base total weight: {own_total_w:.4f}")
+            # ── self OOF save (= task kaggle-rogii-cv-strategies-2026-05-11) ──
+            try:
+                _well_col = (
+                    train_df["well"].values if "well" in train_df.columns
+                    else np.arange(len(y_kb))
+                )
+                _fid = (
+                    fold_id if "fold_id" in dir() and fold_id is not None
+                    else np.full(len(y_kb), -1, dtype=np.int8)
+                )
+                _self_oof_df = pd.DataFrame({
+                    "well": _well_col[: len(y_kb)],
+                    "y_true": y_kb,
+                    "own_oof_blend": oof_blend,
+                    "fold_id": _fid[: len(y_kb)],
+                    **{f"own_oof_{k}": own_oof[k]
+                       for k in ["lgb_own0", "lgb_own1", "lgb_own2", "cb_own"]},
+                })
+                _self_oof_df.to_parquet(
+                    "oof_predictions_self.parquet", index=False
+                )
+                log.info(
+                    f"  self OOF saved (cv-strategies task): "
+                    f"{len(_self_oof_df)} rows, "
+                    f"oof_rmse={float(np.sqrt(np.mean((y_kb - oof_blend) ** 2))):.4f}"
+                )
+            except Exception as _save_e:
+                log.warning(
+                    f"  self OOF save failed: {type(_save_e).__name__}: {_save_e}"
+                )
             if own_total_w > STACK_OWN_WEIGHT_DEGRADE_LIMIT:
                 log.warning(
                     f"  own total weight {own_total_w:.3f} > limit "

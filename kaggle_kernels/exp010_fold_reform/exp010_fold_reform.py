@@ -4792,6 +4792,35 @@ elif MODE in ("infer_edge_qm", "infer_edge_d_kalman", "infer_edge_e_gp_o"):
                 own_coef_norm = own_coef / max(own_coef.sum(), 1e-9)
                 log.info(f"  own Ridge weights: "
                          f"{dict(zip(own_active_keys, np.round(own_coef_norm, 4)))}")
+                # ── self OOF save (= task kaggle-rogii-cv-strategies-2026-05-11) ──
+                try:
+                    _well_col = (
+                        train_df["well"].values if "well" in train_df.columns
+                        else np.arange(len(y_kb))
+                    )
+                    _fid = (
+                        fold_id if "fold_id" in dir() and fold_id is not None
+                        else np.full(len(y_kb), -1, dtype=np.int8)
+                    )
+                    _self_oof_df = pd.DataFrame({
+                        "well": _well_col[: len(y_kb)],
+                        "y_true": y_kb,
+                        "own_oof_blend": own_oof_blend,
+                        "fold_id": _fid[: len(y_kb)],
+                        **{f"own_oof_{k}": own_oof[k] for k in own_active_keys},
+                    })
+                    _self_oof_df.to_parquet(
+                        "oof_predictions_self.parquet", index=False
+                    )
+                    log.info(
+                        f"  self OOF saved (cv-strategies task): "
+                        f"{len(_self_oof_df)} rows, "
+                        f"oof_rmse={float(np.sqrt(np.mean((y_kb - own_oof_blend) ** 2))):.4f}"
+                    )
+                except Exception as _save_e:
+                    log.warning(
+                        f"  self OOF save failed: {type(_save_e).__name__}: {_save_e}"
+                    )
 
                 step = STACK_PATH_B_GRID_STEP
                 grid = np.arange(0.0, 1.0 + step / 2, step)
