@@ -1,0 +1,19 @@
+{
+  "id": "ky7240/rogii-exp019-ravaghi-colab-run",
+  "title": "ROGII exp019 ravaghi colab run",
+  "code_file": "exp019_ravaghi_colab_run.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "false",
+  "enable_tpu": "false",
+  "enable_internet": "false",
+  "dataset_sources": [
+    "ky7240/rogii-ravaghi-colab-output"
+  ],
+  "competition_sources": [
+    "rogii-wellbore-geology-prediction"
+  ],
+  "kernel_sources": [],
+  "model_sources": []
+}
