@@ -21,6 +21,8 @@
 | 8 | 52532035 | 2026-05-11 03:15 | exp008 v2 + 案 D Kalman/PF on dTVT | **9.957** | -0.246 ✅✅ | **9 切り達成**、 AR(1) state-space で dTVT auto-correlation chronicle |
 | 9 | 52534803 | 2026-05-11 05:37 | exp009 v2 + 案 E Sparse GP M=200 + Edge O | **9.738** | -0.219 ✅✅ | **現 best、 rank 17/779**、 ANCC posterior + variance で uncertainty capture |
 | 10 | 52539046 | 2026-05-11 08:31 | exp008 v3 (Huber + hetero + MEDIAN + path b) | 10.253 | +0.515 ⚠️ | exp008 v2 (9.957) 比 +0.296 悪化、 改修群を全 reject |
+| 11 | 52559431 | 2026-05-12 00:15 | exp010 fold reform (= stratified Edge Q + adversarial drop) | 10.227 | +0.489 ⚠️ | **fold 構造変更で base stack 連鎖崩壊**、 §11 詳細分解。 exp016 では fold 保持確定 |
+| 12 | 52559810 | 2026-05-12 00:33 | exp013 winning path B (= D1+D4+D9 inject) | 10.029 | +0.291 ⚠️ | **lookup loaded 0 wells で実質空 inject + featurization noise 化**、 §12 詳細分解。 lookup build なしでは退避 |
 
 ### CV-LB ratio trend
 
@@ -78,6 +80,97 @@ ROGII は **Code Competition format**、 CLI 経由の `kaggle competitions subm
 3. exp015 は ERROR、 修正後 re-run + submit
 
 submit 完了後、 `kaggle competitions submissions rogii-wellbore-geology-prediction` で LB 取得可。 30 分以内に本 doc の §1 表に append + 各 exp の v_(n-1) → v_n 分解 entry を append。
+
+---
+
+---
+
+## §11 v_9 → v_10 分解 (= exp010 fold reform、 LB 10.227)
+
+### submission_id: 52559431
+- **timestamp (UTC)**: 2026-05-12 00:15:10
+- **build_commit**: 3777691 (= feat/phase-a-gold-confirm-2026-05-12 branch、 ただし kernel は別 source)
+- **mode**: exp010 fold reform on exp009 v2 base = stratified Edge Q + adversarial drop
+- **base submission**: 52534803 (= exp009 v2 LB 9.738)
+- **source_count**: 2 (= stratified Edge Q fold + adversarial drop)
+- **force_count**: 0
+- **est_total_score**: (OOF path b RMSE = 10.4580、 LB-est gap +0.231 想定)
+- **public_score (LB)**: **10.227** ⚠️
+- **lb_minus_est**: -0.231 ft (= 10.227 - 10.458)
+- **lb_div_est**: 0.978
+- **vs v_(n-1) = exp009 v2 LB 9.738**: **+0.489 ft 悪化** ⚠️
+- **per-task source diff**:
+  - source 1: stratified Edge Q (= visible_ratio × tw_gr_resid_std × b_ANCC_med の 3-key stratify) → **-0.5 ft 期待だったが +0.489 ft 悪化** = 仮説 H-A1 誤り
+  - source 2: adversarial drop (= train-test mismatch wells の sample_weight ダウン) → 効果分離不可
+- **effect isolate**:
+  - **stratified Edge Q fold の単独効果**: H10 postmortem では σ_fold 0.526 → 0.303 と書かれていたが、 **σ_fold 小さくしても LB 改善せず、 むしろ悪化**。 これは fold 平準化が **base stack の chemistry を壊した** ことを示唆
+  - **base stack 全体の Co-evolve 不在**: karnakbaev 5-base の OOF は元 fold で fit 済、 我々が Edge Q stratified で再 generate すると mismatch (= exp007 fold-misalign LB 10.677 と同 pattern)
+- **仮説帰納**:
+  - exp007 (= 自前 4-base + Edge Q fold) で LB 10.677 → 自前 base が Edge Q fold で性能不足だった
+  - exp009 v2 (= karnakbaev fold 維持 + 案 D + 案 E) で LB 9.738 → fold 触らないと改善
+  - exp010 (= Edge Q stratified) で LB 10.227 → fold 触ると base stack 連鎖崩壊
+  - **教訓**: **fold 構造変更は exp009 v2 base に対して逆効果**、 Phase A 統合 kernel exp016 では fold を保持
+- **roadmap refine**:
+  - Phase A 統合 kernel **exp016 では exp009 v2 fold を完全に保持**
+  - fold reform は Phase B 以降で **fold + base + features を Co-evolve させる再設計** が必須 (= 単純な fold 変更ではない)
+  - 案 D Kalman、 案 E Sparse GP、 Edge S/O はすべて exp009 v2 fold で fit 済 → これらを base に **module-level inject** で Phase A を進める
+- **shake-up risk 評価**: C1 fold 0 (= 140 wells LB-proxy) OOF 未計算、 後で算出
+
+---
+
+## §12 v_9 → v_10b 分解 (= exp013 winning path B、 LB 10.029)
+
+### submission_id: 52559810
+- **timestamp (UTC)**: 2026-05-12 00:33:16
+- **build_commit**: 85ac8c7 (= feat/cv-strategies-final-2026-05-11 branch、 別の source)
+- **mode**: exp013 winning path B on v2 = exp009 v2 base + D1+D4+D9 feature inject
+- **base submission**: 52534803 (= exp009 v2 LB 9.738)
+- **source_count**: 3 (= D1 + D4 + D9 inject)
+- **force_count**: 0
+- **est_total_score**: (OOF path b RMSE = 10.4538)
+- **public_score (LB)**: **10.029** ⚠️
+- **lb_minus_est**: -0.425 ft
+- **lb_div_est**: 0.959
+- **vs v_(n-1) = exp009 v2 LB 9.738**: **+0.291 ft 悪化** ⚠️
+- **per-task source diff**:
+  - **CRITICAL**: kernel log で **"[winpath B] lookup loaded: 0 wells"** が **3 回**繰り返し → D1+D4+D9 feature inject の **lookup table が空** で、 実質的に何も inject されていない
+  - inject されたものは 0 features、 ただし featurization pipeline が拡張版 (= D1+D4+D9 column 化) で実行され、 既存 features の column 順序 / dtype 変更で **base model 推論が劣化**
+- **effect isolate**:
+  - winning path B (= karnakbaev-top2 distill から D1+D4+D9 feature inject) の効果は **0 (= lookup 空)**
+  - LB 10.029 は base 9.738 から +0.291 悪化 = 拡張 featurization の **noise 化**
+- **仮説帰納**:
+  - 「D1+D4+D9 inject で -0.05〜-0.15 ft 改善」 仮説 H-A2 は **lookup table build を skip した結果完全に誤り**
+  - lookup table は karnakbaev OOF 系列から build する必要、 単純に kernel run しても 0 wells lookup
+  - 拡張 featurization が **空 inject でも noise 化する** = column-wise structure change が base model にとって OOD
+- **roadmap refine**:
+  - winning path B (= D1+D4+D9 inject) は **lookup table を別途 build** してから再試行
+  - lookup build script は `winpath B` 系の kernel で実装、 karnakbaev OOF → top2 distill → D1/D4/D9 feature 化
+  - **当面 Phase A 統合 kernel から除外**、 Phase B 以降で再設計
+- **shake-up risk 評価**: 同上未計算
+
+---
+
+## §13 重大発見 (= 2 件失敗から導く Phase A 統合 kernel 設計指針)
+
+両 exp が exp009 v2 base に対して悪化した事実から、 Phase A 統合 kernel **exp016 の設計指針** を確定:
+
+1. **exp009 v2 fold を完全保持** (= karnakbaev 元 fold)、 Edge Q stratified / adversarial drop は **inject しない**
+2. **base model (= karnakbaev 5-base + 自前 4-base) も保持**、 これらの OOF / test_preds を **そのまま使う**
+3. **改修は module-level inject のみ**:
+   - A3 Numba JIT beam ±2 → 既存 `beam_search`, `beam_search_dir` を Numba 化 + ±2 拡張、 既存と並走 (= ablation 可能)
+   - A4 segment b_well → 既存 `b_well` 計算に early/mid/late/wls phase 列を **追加** (= 既存削らない)
+   - A5 softmax NCC → 既存 `self_corr_tvt` を multi-scale softmax 拡張に置換 or 並走
+   - A6 Optuna 3-axis postproc → 既存 alpha × tau grid を Optuna 500-trial に置換、 ただし alpha/tau range は既存 grid の最良点を center に
+   - A2 Climber → 既存 Ridge meta を Climber に置換 (= allow_negative_weights=True、 precision 0.001)
+4. **feature inject (= D1+D4+D9 系) は当面除外** (= lookup table empty で逆効果確定)
+5. **ablation 必須**: 各 module 単独で 1 submit して LB lift 実測、 5 module で 5 submit + 統合 1 submit = 6 submit budget (= 残 24h で 5 件 quota 厳守)
+
+→ exp016 のフロー: 
+- Step 1: exp009 v2 完全 copy (= 既存 LB 9.738 を再現確認)
+- Step 2: A3 (Numba beam ±2) だけ inject → submit → ablation 実測
+- Step 3: A4 + A5 add → submit
+- Step 4: A6 (Optuna) add → submit
+- Step 5: A2 (Climber) add → submit (= 統合完了)
 
 ---
 
