@@ -137,3 +137,76 @@ def optimize_postproc(
         "best_score": float(study.best_value),
         "study": study,
     }
+
+
+def optimize_postproc_grid(
+    md_since: np.ndarray,
+    model_delta: np.ndarray,
+    pf_delta: np.ndarray,
+    y_true_delta: np.ndarray,
+    alphas: np.ndarray | None = None,
+    taus: list[float | None] | None = None,
+    w_pfs: np.ndarray | None = None,
+) -> dict[str, object]:
+    """Exhaustive grid search over (alpha, tau, w_pf) — raunakdey07 2,530-cell style.
+
+    Algorithm: iterate every (alpha, tau, w_pf) combination, evaluate RMSE,
+    return the cell with minimum RMSE. raunakdey07 uses 23 x 10 x 11 = 2,530
+    cells (default below) — the brute-force counterpart to optimize_postproc's
+    Optuna TPE 500-trial sparse search.
+
+    Defaults (= ravaghi/wellbore-geology-prediction-hill-climbing cell-14):
+        alphas = np.arange(0.60, 1.05, 0.02)               # 23 values
+        taus   = [None, 20., 40., 60., 80., 100., 150., 200., 300., 400.]   # 10
+        w_pfs  = np.arange(0.0, 0.21, 0.02)                # 11 values
+
+    Args:
+        md_since / model_delta / pf_delta / y_true_delta: same as optimize_postproc
+        alphas / taus / w_pfs: explicit grid axes; if None, use raunakdey07 defaults
+
+    Returns:
+        {
+            'best_params': {'alpha': float, 'tau': float|None, 'w_pf': float},
+            'best_score': float (= min RMSE over the grid),
+            'n_cells': int (= total cells evaluated),
+            'all_scores': np.ndarray of shape (n_alpha, n_tau, n_w_pf),
+        }
+    """
+    if alphas is None:
+        alphas = np.arange(0.60, 1.05, 0.02)
+    if taus is None:
+        taus = [None, 20.0, 40.0, 60.0, 80.0, 100.0, 150.0, 200.0, 300.0, 400.0]
+    if w_pfs is None:
+        w_pfs = np.arange(0.0, 0.21, 0.02)
+
+    alphas_arr = np.asarray(alphas, dtype=np.float64)
+    w_pfs_arr = np.asarray(w_pfs, dtype=np.float64)
+    n_a = len(alphas_arr)
+    n_t = len(taus)
+    n_w = len(w_pfs_arr)
+    n_cells = n_a * n_t * n_w
+
+    all_scores = np.full((n_a, n_t, n_w), np.inf, dtype=np.float64)
+    best_score = np.inf
+    best_params: dict[str, float | int | None] = {"alpha": 0.0, "tau": None, "w_pf": 0.0}
+
+    for ia, alpha in enumerate(alphas_arr):
+        for it, tau in enumerate(taus):
+            for iw, w_pf in enumerate(w_pfs_arr):
+                d = apply_pp(md_since, model_delta, pf_delta, float(alpha), tau, float(w_pf))
+                rmse = float(root_mean_squared_error(y_true_delta, d))
+                all_scores[ia, it, iw] = rmse
+                if rmse < best_score:
+                    best_score = rmse
+                    best_params = {
+                        "alpha": float(alpha),
+                        "tau": tau,
+                        "w_pf": float(w_pf),
+                    }
+
+    return {
+        "best_params": best_params,
+        "best_score": best_score,
+        "n_cells": n_cells,
+        "all_scores": all_scores,
+    }

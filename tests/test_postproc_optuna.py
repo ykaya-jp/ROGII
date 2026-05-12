@@ -92,3 +92,68 @@ def test_optimize_postproc_minimal_convergence():
     assert out["best_score"] < 0.5, f"best_score {out['best_score']} too high"
     assert 0.7 <= bp["alpha"] <= 1.0
     assert 0.0 <= bp["w_pf"] <= 0.5
+
+
+# -----------------------------------------------------------------------------
+# A6.1 exhaustive grid tests (= raunakdey07 2,530-cell)
+# -----------------------------------------------------------------------------
+
+
+def test_optimize_postproc_grid_default_2530_cells():
+    """raunakdey07 default grid = 23 x 10 x 11 = 2,530 cells."""
+    from rogii.postproc_optuna import optimize_postproc_grid
+
+    rng = np.random.default_rng(42)
+    n = 100
+    md_since = rng.uniform(0, 200, n).astype(np.float32)
+    md = rng.normal(0, 1, n).astype(np.float32)
+    pf = rng.normal(0, 1, n).astype(np.float32)
+    y_true = apply_pp(md_since, md, pf, 0.9, 100, 0.1)
+    out = optimize_postproc_grid(md_since, md, pf, y_true)
+    assert out["n_cells"] == 23 * 10 * 11
+    assert out["all_scores"].shape == (23, 10, 11)
+    bp = out["best_params"]
+    assert 0.6 <= bp["alpha"] <= 1.05
+    assert bp["tau"] is None or (20.0 <= bp["tau"] <= 400.0)
+    assert 0.0 <= bp["w_pf"] <= 0.21
+
+
+def test_optimize_postproc_grid_recovers_truth():
+    """Synthetic truth (alpha=0.9, tau=100, w_pf=0.1) should be discoverable."""
+    from rogii.postproc_optuna import optimize_postproc_grid
+
+    rng = np.random.default_rng(7)
+    n = 300
+    md_since = rng.uniform(0, 200, n).astype(np.float32)
+    md = rng.normal(0, 1, n).astype(np.float32)
+    pf = rng.normal(0, 1, n).astype(np.float32)
+    y_true = apply_pp(md_since, md, pf, 0.9, 100, 0.1)
+    out = optimize_postproc_grid(md_since, md, pf, y_true)
+    bp = out["best_params"]
+    # truth (0.9, 100, 0.1) should be present in default grid
+    assert abs(bp["alpha"] - 0.9) < 0.02
+    assert bp["tau"] == 100.0
+    assert abs(bp["w_pf"] - 0.1) < 0.02
+    assert out["best_score"] < 1e-3  # perfect synthetic match
+
+
+def test_optimize_postproc_grid_custom_axes():
+    """Custom small grid for fast test."""
+    from rogii.postproc_optuna import optimize_postproc_grid
+
+    n = 50
+    md_since = np.linspace(0, 100, n, dtype=np.float32)
+    md = np.ones(n, dtype=np.float32)
+    pf = np.zeros(n, dtype=np.float32)
+    y_true = np.ones(n) * 0.5  # alpha=0.5, tau=None, w_pf=0
+    out = optimize_postproc_grid(
+        md_since, md, pf, y_true,
+        alphas=np.array([0.3, 0.5, 0.7]),
+        taus=[None, 50.0],
+        w_pfs=np.array([0.0, 0.2]),
+    )
+    assert out["n_cells"] == 3 * 2 * 2
+    bp = out["best_params"]
+    assert bp["alpha"] == 0.5
+    assert bp["tau"] is None
+    assert bp["w_pf"] == 0.0

@@ -125,3 +125,98 @@ def test_climber_objective_maximize_with_r2():
         max_iter=500,
     ).fit(oof, y)
     assert c.best_score > 0.5
+
+
+# -----------------------------------------------------------------------------
+# A2.1 continuous mode tests (= raunakdey07 Gaussian perturbation)
+# -----------------------------------------------------------------------------
+
+
+def test_climber_invalid_mode():
+    with pytest.raises(ValueError, match="mode must be"):
+        Climber(mode="invalid")
+
+
+def test_climber_invalid_perturb_sigma():
+    with pytest.raises(ValueError, match="perturb_sigma must be"):
+        Climber(mode="continuous", perturb_sigma=0)
+
+
+def test_climber_continuous_mode_recovers_two_base():
+    """continuous mode: y = 0.6 * b1 + 0.4 * b2 → recover within tolerance."""
+    rng = np.random.default_rng(7)
+    b1 = rng.normal(0, 1, 500)
+    b2 = rng.normal(0, 1, 500)
+    y = 0.6 * b1 + 0.4 * b2
+    oof = np.stack([b1, b2], axis=1)
+    c = Climber(
+        mode="continuous",
+        perturb_sigma=0.02,
+        patience=500,
+        max_iter=5000,
+        normalize_weights=True,
+        seed=42,
+    ).fit(oof, y)
+    assert c.weights_.shape == (2,)
+    # weights sum should equal 1 (= simplex)
+    assert abs(c.weights_.sum() - 1.0) < 1e-6
+    # both weights in [0, 1]
+    assert (c.weights_ >= 0).all() and (c.weights_ <= 1).all()
+    # final score should be reasonably low
+    assert c.best_score < 0.5
+
+
+def test_climber_continuous_mode_patience_stops_early():
+    """patience=5 should stop early on flat landscape (= y all zero)."""
+    rng = np.random.default_rng(1)
+    n = 100
+    oof = rng.normal(0, 1, (n, 3))
+    y = np.zeros(n)  # constant target → no signal
+    c = Climber(
+        mode="continuous",
+        patience=5,
+        max_iter=10000,
+        perturb_sigma=0.02,
+        normalize_weights=False,
+        allow_negative_weights=True,
+        seed=42,
+    ).fit(oof, y)
+    # history should be short (= early stop)
+    assert len(c.history_) < 10000
+
+
+def test_climber_continuous_mode_predict():
+    """continuous mode predict shape + arithmetic check."""
+    rng = np.random.default_rng(5)
+    oof = rng.normal(0, 1, (200, 4))
+    y = oof[:, 0] - 0.3 * oof[:, 1] + rng.normal(0, 0.1, 200)
+    c = Climber(
+        mode="continuous",
+        perturb_sigma=0.05,
+        patience=300,
+        max_iter=2000,
+        normalize_weights=False,
+        allow_negative_weights=True,
+        seed=42,
+    ).fit(oof, y)
+    test = rng.normal(0, 1, (40, 4))
+    p = c.predict(test)
+    assert p.shape == (40,)
+    assert np.allclose(p, test @ c.weights_)
+
+
+def test_climber_continuous_normalize_simplex_enforced():
+    """normalize_weights=True must enforce sum==1 + nonneg post-fit."""
+    rng = np.random.default_rng(11)
+    oof = rng.normal(0, 1, (150, 3))
+    y = oof @ np.array([0.5, 0.3, 0.2])
+    c = Climber(
+        mode="continuous",
+        perturb_sigma=0.03,
+        patience=500,
+        max_iter=3000,
+        normalize_weights=True,
+        seed=42,
+    ).fit(oof, y)
+    assert (c.weights_ >= 0).all()
+    assert abs(c.weights_.sum() - 1.0) < 1e-6

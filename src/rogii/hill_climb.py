@@ -63,11 +63,33 @@ class Climber:
         verbose: bool = False,
         n_jobs: int = 1,  # placeholder, single-thread is already fast
         seed: int = 42,
+        mode: str = "discrete",
+        perturb_sigma: float = 0.02,
+        normalize_weights: bool = False,
     ) -> None:
+        """Initialize Climber.
+
+        Args:
+            mode: "discrete" (= default, +- precision step per iter, Caruana 2004) or
+                  "continuous" (= Gaussian perturbation per iter, raunakdey07 style).
+                  raunakdey07 NB uses mode="continuous", patience=1500, perturb_sigma=0.02,
+                  normalize_weights=True. Set these to reproduce Sub-9 RMSE behavior.
+            perturb_sigma: only used when mode="continuous". std of N(0, sigma) perturbation
+                  applied to current weights per iter.
+            normalize_weights: only used when mode="continuous". If True, after each
+                  perturbation clip to [0, 1] and normalize so sum=1 (= raunakdey07 hard
+                  simplex constraint). If False, leave perturbed weights as-is.
+            patience: max consecutive non-improvement iters before stop. raunakdey07 uses
+                  1500 (= aggressive exploration). default 10 keeps Caruana 2004 fast.
+        """
         if objective not in {"minimize", "maximize"}:
             raise ValueError(f"objective must be 'minimize' or 'maximize', got {objective}")
         if precision <= 0 or precision > 1:
             raise ValueError(f"precision must be in (0, 1], got {precision}")
+        if mode not in {"discrete", "continuous"}:
+            raise ValueError(f"mode must be 'discrete' or 'continuous', got {mode}")
+        if perturb_sigma <= 0:
+            raise ValueError(f"perturb_sigma must be > 0, got {perturb_sigma}")
 
         self.objective = objective
         self.eval_metric = eval_metric or root_mean_squared_error
@@ -78,6 +100,9 @@ class Climber:
         self.verbose = bool(verbose)
         self.n_jobs = int(n_jobs)
         self.seed = int(seed)
+        self.mode = mode
+        self.perturb_sigma = float(perturb_sigma)
+        self.normalize_weights = bool(normalize_weights)
 
         # post-fit attributes
         self.weights_: np.ndarray | None = None
@@ -112,6 +137,10 @@ class Climber:
 
         n_samples, n_base = oof.shape
         self.n_base_ = n_base
+
+        # dispatch to continuous mode if requested (= raunakdey07 style)
+        if self.mode == "continuous":
+            return self._fit_continuous(oof, y)
 
         weights = np.zeros(n_base, dtype=np.float64)
         cur_pred = np.zeros(n_samples, dtype=np.float64)
@@ -154,6 +183,73 @@ class Climber:
                     print(f"[Climber] iter {it}  best={best_score:.6f}  weights_sum={weights.sum():.4f}")
 
         self.weights_ = weights
+        self.best_score_ = best_score
+        self.history_ = history
+        return self
+
+    def _fit_continuous(self, oof: np.ndarray, y: np.ndarray) -> "Climber":
+        """Continuous Gaussian perturbation fit (= raunakdey07 style).
+
+        Algorithm (= ravaghi/wellbore-geology-prediction-hill-climbing-style):
+            best_w = uniform 1/n_base
+            for iter in 1..max_iter:
+                w = best_w + N(0, perturb_sigma, n_base)
+                if normalize_weights: w = clip(w, 0, 1); w /= w.sum()
+                else if not allow_negative_weights: w = max(w, 0)
+                score = eval_metric(y, X @ w)
+                if better: best = w, no_improve = 0
+                else: no_improve += 1; break if no_improve >= patience
+
+        Uses numpy default_rng seeded by self.seed for reproducibility.
+        """
+        n_samples, n_base = oof.shape
+        rng = np.random.default_rng(self.seed)
+
+        best_w = np.ones(n_base, dtype=np.float64) / n_base
+        if self.normalize_weights:
+            best_w = np.clip(best_w, 0.0, 1.0)
+            s = best_w.sum()
+            if s > 0:
+                best_w = best_w / s
+        best_pred = oof @ best_w
+        best_score = float(self.eval_metric(y, best_pred))
+        history: list[tuple[int, float]] = [(0, best_score)]
+        no_improve = 0
+
+        for it in range(1, self.max_iter + 1):
+            w = best_w + rng.normal(0.0, self.perturb_sigma, n_base)
+            if self.normalize_weights:
+                w = np.clip(w, 0.0, 1.0)
+                s = w.sum()
+                if s <= 0:
+                    no_improve += 1
+                    if no_improve >= self.patience:
+                        break
+                    continue
+                w = w / s
+            elif not self.allow_negative_weights:
+                w = np.maximum(w, 0.0)
+
+            cand_pred = oof @ w
+            score = float(self.eval_metric(y, cand_pred))
+            if self._is_better(score, best_score):
+                best_w = w
+                best_score = score
+                no_improve = 0
+                history.append((it, best_score))
+                if self.verbose and it % 500 == 0:
+                    print(f"[Climber-continuous] iter {it}  best={best_score:.6f}")
+            else:
+                no_improve += 1
+                if no_improve >= self.patience:
+                    if self.verbose:
+                        print(
+                            f"[Climber-continuous] stop at iter {it} after {self.patience} non-improve "
+                            f"(best={best_score:.6f})"
+                        )
+                    break
+
+        self.weights_ = best_w
         self.best_score_ = best_score
         self.history_ = history
         return self
