@@ -7,7 +7,7 @@
 ## CRITICAL: Session start protocol (= `~/projects/kaggle/CLAUDE.md §0.1` 準拠)
 
 1. 本ファイル read
-2. **Latest HANDOFF: `docs/dev/HANDOFF-2026-05-12.md`** ★ ← 必ず first read (= 2026-05-12 session で Phase A 5 module 全実装完了 + commit 3 件 push 済、 next action 6 step は §7)
+2. **Latest HANDOFF: `docs/dev/HANDOFF-2026-05-12.md`** ★ ← 必ず first read (= 2026-05-12 session で Phase A 5 module + raunakdey07 拡張 3 件 (A2.1/A3.1/A6.1) 全実装、 48 tests pass、 11 commits push、 **exp016 = exp015 slug version 2 で RUNNING**、 next action は §7 Step 1b の submit recipe)
 3. `git log --oneline -30` + `.venv/bin/kaggle competitions submissions rogii-wellbore-geology-prediction` で最新確認
 4. 該当 handoff doc の "Next session 即 action" section を 1 つずつ実行
 
