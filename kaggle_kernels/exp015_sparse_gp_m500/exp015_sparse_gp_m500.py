@@ -143,6 +143,191 @@ from xgboost import XGBRegressor
 
 warnings.filterwarnings("ignore")
 
+
+# ============================================================================
+# exp016 inline copies (= self-contained Kaggle script constraint)
+# Source modules: src/rogii/hill_climb.py + src/rogii/postproc_optuna.py
+# License: Caruana 2004 ICML algorithm + ravaghi/wellbore-geology-prediction-
+# hill-climbing cell-12/14 (Apache-2.0 fair-use)
+# ============================================================================
+
+
+class _Climber:
+    """Inline Climber for exp016 (= self-contained, copy from src/rogii/hill_climb.py).
+
+    Generalised Caruana 2004 ICML Ensemble Selection with two modes:
+      - mode='discrete': +-precision step update per iter
+      - mode='continuous': Gaussian perturbation N(0, perturb_sigma) per iter
+                           (= raunakdey07 cell-12 style)
+
+    When mode='continuous' + normalize_weights=True + patience=1500, the
+    behaviour exactly reproduces raunakdey07/rogii-ultra-sub-9-rmse Hill Climb.
+    """
+
+    def __init__(
+        self,
+        objective="minimize",
+        eval_metric=None,
+        allow_negative_weights=True,
+        precision=0.001,
+        max_iter=10000,
+        patience=10,
+        verbose=False,
+        seed=42,
+        mode="discrete",
+        perturb_sigma=0.02,
+        normalize_weights=False,
+    ):
+        self.objective = objective
+        self.eval_metric = eval_metric or root_mean_squared_error
+        self.allow_negative_weights = allow_negative_weights
+        self.precision = float(precision)
+        self.max_iter = int(max_iter)
+        self.patience = int(patience)
+        self.verbose = bool(verbose)
+        self.seed = int(seed)
+        self.mode = mode
+        self.perturb_sigma = float(perturb_sigma)
+        self.normalize_weights = bool(normalize_weights)
+        self.weights_ = None
+        self.best_score_ = float("nan")
+        self.history_ = []
+        self.n_base_ = 0
+
+    def _is_better(self, new, old, tol=1e-12):
+        return (new < old - tol) if self.objective == "minimize" else (new > old + tol)
+
+    def fit(self, oof, y):
+        oof = np.asarray(oof, dtype=np.float64)
+        y = np.asarray(y, dtype=np.float64).ravel()
+        n_samples, n_base = oof.shape
+        self.n_base_ = n_base
+        if self.mode == "continuous":
+            return self._fit_continuous(oof, y)
+        weights = np.zeros(n_base, dtype=np.float64)
+        cur_pred = np.zeros(n_samples, dtype=np.float64)
+        best_score = float(self.eval_metric(y, cur_pred))
+        history = [(0, best_score)]
+        no_improve = 0
+        signs = (1.0, -1.0) if self.allow_negative_weights else (1.0,)
+        for it in range(1, self.max_iter + 1):
+            best_new_score = best_score
+            best_idx = -1
+            best_sign = 0.0
+            for j in range(n_base):
+                for sign in signs:
+                    cand_pred = cur_pred + sign * self.precision * oof[:, j]
+                    score = float(self.eval_metric(y, cand_pred))
+                    if self._is_better(score, best_new_score):
+                        best_new_score = score
+                        best_idx = j
+                        best_sign = sign
+            if best_idx < 0:
+                no_improve += 1
+                if no_improve >= self.patience:
+                    break
+            else:
+                cur_pred = cur_pred + best_sign * self.precision * oof[:, best_idx]
+                weights[best_idx] += best_sign * self.precision
+                best_score = best_new_score
+                no_improve = 0
+                history.append((it, best_score))
+        self.weights_ = weights
+        self.best_score_ = best_score
+        self.history_ = history
+        return self
+
+    def _fit_continuous(self, oof, y):
+        n_samples, n_base = oof.shape
+        rng = np.random.default_rng(self.seed)
+        best_w = np.ones(n_base, dtype=np.float64) / n_base
+        if self.normalize_weights:
+            best_w = np.clip(best_w, 0.0, 1.0)
+            s = best_w.sum()
+            if s > 0:
+                best_w = best_w / s
+        best_pred = oof @ best_w
+        best_score = float(self.eval_metric(y, best_pred))
+        history = [(0, best_score)]
+        no_improve = 0
+        for it in range(1, self.max_iter + 1):
+            w = best_w + rng.normal(0.0, self.perturb_sigma, n_base)
+            if self.normalize_weights:
+                w = np.clip(w, 0.0, 1.0)
+                s = w.sum()
+                if s <= 0:
+                    no_improve += 1
+                    if no_improve >= self.patience:
+                        break
+                    continue
+                w = w / s
+            elif not self.allow_negative_weights:
+                w = np.maximum(w, 0.0)
+            cand_pred = oof @ w
+            score = float(self.eval_metric(y, cand_pred))
+            if self._is_better(score, best_score):
+                best_w = w
+                best_score = score
+                no_improve = 0
+                history.append((it, best_score))
+            else:
+                no_improve += 1
+                if no_improve >= self.patience:
+                    break
+        self.weights_ = best_w
+        self.best_score_ = best_score
+        self.history_ = history
+        return self
+
+    def predict(self, X):
+        if self.weights_ is None:
+            raise RuntimeError("Climber has not been fit")
+        X = np.asarray(X, dtype=np.float64)
+        return X @ self.weights_
+
+    @property
+    def best_score(self):
+        return self.best_score_
+
+
+def _apply_pp_3axis(md_since, model_delta, pf_delta, alpha, tau, w_pf):
+    """3-axis postproc: combine model+PF deltas, fade-in, scale.
+
+    Source: ravaghi/wellbore-geology-prediction-hill-climbing cell-14 apply_pp.
+    """
+    md_since = np.maximum(np.asarray(md_since, dtype=np.float32), 0.0)
+    d = (
+        np.asarray(model_delta, dtype=np.float32) * (1.0 - w_pf)
+        + np.asarray(pf_delta, dtype=np.float32) * w_pf
+    )
+    if tau:
+        fade = 1.0 - np.exp(-md_since / float(tau))
+        d = d * fade.astype(np.float32)
+    return d * np.float32(alpha)
+
+
+def _optimize_postproc_grid_2530(md_since, model_delta, pf_delta, y_true_delta):
+    """Exhaustive 23 × 10 × 11 = 2,530-cell grid search (= raunakdey07 cell-14)."""
+    alphas = np.arange(0.60, 1.05, 0.02)
+    taus = [None, 20.0, 40.0, 60.0, 80.0, 100.0, 150.0, 200.0, 300.0, 400.0]
+    w_pfs = np.arange(0.0, 0.21, 0.02)
+    best_score = np.inf
+    best = {"alpha": 0.0, "tau": None, "w_pf": 0.0}
+    for alpha in alphas:
+        for tau in taus:
+            for w_pf in w_pfs:
+                d = _apply_pp_3axis(
+                    md_since, model_delta, pf_delta, float(alpha), tau, float(w_pf)
+                )
+                rmse = float(root_mean_squared_error(y_true_delta, d))
+                if rmse < best_score:
+                    best_score = rmse
+                    best = {"alpha": float(alpha), "tau": tau, "w_pf": float(w_pf)}
+    return best, best_score
+# ============================================================================
+# end of exp016 inline copies
+# ============================================================================
+
 # ─── Execution Config ────────────────────────────────────────────────────────
 # MODE: "train" | "infer" | "cv" | "features_only" | "ensemble_only"
 #       | "infer_tabicl" | "infer_edge_qm" | "infer_edge_d_kalman"
@@ -153,7 +338,22 @@ warnings.filterwarnings("ignore")
 #                  Pipeline is identical to infer_edge_d_kalman; GP and
 #                  Edge O FE are injected inside build_well_features when
 #                  GP_ENABLE / EDGE_O_ENABLE.
-MODE = "infer_edge_e_gp_o"
+MODE = "train"  # exp016 phase A integrated: train mode runs full Climber + 3-axis grid
+
+# ─── exp016 Phase A integration flags (= raunakdey07 Sub-9 RMSE core) ───────
+# Plan: /home/yusuke_kaya/.claude/plans/floating-cuddling-haven.md
+# Strategy: docs/research/2026-05-12-leaderboard-and-raunakdey07-strategy.dense.md
+# When both True, the Ridge meta + 2-axis postproc grid are replaced by
+# Caruana 2004 generalised Climber (continuous Gaussian perturbation σ=0.02,
+# patience=1500) and a 23 × 10 × 11 = 2,530-cell exhaustive α × τ × w_pf grid
+# matching ravaghi/wellbore-geology-prediction-hill-climbing cell-12 + cell-14.
+# Falsy → fall back to exp009 v2 baseline behavior (= LB 9.738 reproduction).
+USE_CLIMBER          = True   # raunakdey07 layer 1 (= Hill Climb 10K + patience 1500)
+USE_EXHAUSTIVE_GRID  = True   # raunakdey07 layer 2 (= 2530-cell exhaustive grid)
+CLIMBER_PATIENCE     = 1500
+CLIMBER_MAX_ITER     = 10000
+CLIMBER_PERTURB_SIG  = 0.02
+CLIMBER_NORMALIZE    = True
 
 # Active base models (for karnakbaev pretrained predict).
 ACTIVE_MODELS = ["lgb0", "lgb1", "lgb2", "xgb", "cb"]
@@ -210,7 +410,7 @@ KALMAN_STD_FLOOR_FRAC = 0.1  # std_pred clipped to >= sigma * this fraction
 # emit 24 features (6 formations x 4 stats). FormationPlaneKNN is preserved
 # as the orthogonal point-estimate baseline. See experiments/exp009/design.md.
 GP_ENABLE            = True
-GP_M_INDUCE          = 500    # K-Means cluster centers (= inducing points)
+GP_M_INDUCE          = 200    # K-Means cluster centers (= inducing points)
 GP_N_RESTARTS        = 3      # n_restarts_optimizer for sklearn GPR
 GP_LENGTH_SCALE_INIT = 1.0    # initial length scale (post-normalisation)
 GP_LENGTH_SCALE_BOUNDS = (1e-2, 1e3)
@@ -2996,31 +3196,52 @@ print("Cross-validation loaded ✓")
 def optimise_ridge_ensemble(
     oof_preds:  dict,
     y_true:     np.ndarray,
-) -> Tuple[Ridge, dict]:
-    """
-    Fit a positive-constrained Ridge meta-learner on OOF predictions.
-    Returns (ridge_model, weights_dict).
+):
+    """Fit a meta-learner on OOF predictions.
+
+    When USE_CLIMBER=True, fits a continuous Climber (= raunakdey07 Sub-9 RMSE
+    cell-12 style: Gaussian perturbation σ=CLIMBER_PERTURB_SIG, patience=
+    CLIMBER_PATIENCE, normalize_weights=CLIMBER_NORMALIZE). Otherwise falls
+    back to positive Ridge (= exp009 v2 baseline).
+
+    Returns (model, weights_dict). Both Climber and Ridge expose .predict(X).
     """
     keys     = list(oof_preds.keys())
     Sx       = np.column_stack([oof_preds[k] for k in keys])
 
-    ridge    = Ridge(alpha=1.0, fit_intercept=False, positive=True)
-    ridge.fit(Sx, y_true)
+    if USE_CLIMBER:
+        meta = _Climber(
+            objective="minimize",
+            mode="continuous",
+            perturb_sigma=CLIMBER_PERTURB_SIG,
+            patience=CLIMBER_PATIENCE,
+            max_iter=CLIMBER_MAX_ITER,
+            normalize_weights=CLIMBER_NORMALIZE,
+            allow_negative_weights=False,
+            seed=42,
+        ).fit(Sx, y_true)
+        coef = np.asarray(meta.weights_, dtype=np.float64)
+        oof_stk = meta.predict(Sx)
+        meta_name = "CLIMBER (continuous)"
+    else:
+        meta = Ridge(alpha=1.0, fit_intercept=False, positive=True)
+        meta.fit(Sx, y_true)
+        coef = np.asarray(meta.coef_, dtype=np.float64)
+        oof_stk = meta.predict(Sx)
+        meta_name = "RIDGE (positive)"
 
-    oof_stk  = ridge.predict(Sx)
     r_stk    = root_mean_squared_error(y_true, oof_stk)
     r_avg    = root_mean_squared_error(y_true, Sx.mean(1))
 
-    coef     = ridge.coef_
     coef_sum = max(coef.sum(), 1e-9)
     weights  = {k: float(coef[i] / coef_sum) for i, k in enumerate(keys)}
 
-    section(log, "RIDGE STACKING ENSEMBLE")
+    section(log, f"{meta_name} STACKING ENSEMBLE")
     log.info(f"  Equal-avg OOF RMSE : {r_avg:.5f}")
-    log.info(f"  Ridge stk OOF RMSE : {r_stk:.5f}  (Δ={r_avg - r_stk:+.5f})")
+    log.info(f"  Stack OOF RMSE     : {r_stk:.5f}  (Δ={r_avg - r_stk:+.5f})")
     for k, w in weights.items():
         log.info(f"    {k:8s}: {w:.4f}")
-    return ridge, weights
+    return meta, weights
 
 
 def optimise_nelder_mead(
@@ -3180,28 +3401,72 @@ def search_postproc_params(
     train_df:  pd.DataFrame,
     final_oof: np.ndarray,
     y_true:    np.ndarray,
-) -> Tuple[float, Optional[float]]:
-    """Grid search alpha × tau on OOF delta predictions."""
+    pf_oof:    Optional[np.ndarray] = None,
+):
+    """Grid search alpha × tau (× w_pf when USE_EXHAUSTIVE_GRID) on OOF delta.
+
+    When USE_EXHAUSTIVE_GRID=True, runs 23 × 10 × 11 = 2,530-cell exhaustive
+    grid (= raunakdey07 cell-14 default) including w_pf for PF blend ratio.
+    Returns 3-tuple (alpha, tau, w_pf).
+    Otherwise runs the legacy 9 × 6 = 54-cell α × τ grid and returns 2-tuple
+    (alpha, tau).
+
+    pf_oof: PF prediction delta on train OOF. Required when USE_EXHAUSTIVE_GRID
+    is True; when None, uses zeros (= equivalent to w_pf=0 collapse).
+    """
     base    = train_df["last_known_tvt"].values
     y_abs   = y_true + base  # absolute TVT
+    md_since = np.maximum(train_df["md_since"].values, 0.0)
 
-    best_cfg, best_r = (None, None), np.inf
+    if USE_EXHAUSTIVE_GRID:
+        # raunakdey07 cell-14: 23 × 10 × 11 = 2,530-cell exhaustive grid
+        pf_delta = (
+            np.asarray(pf_oof, dtype=np.float64)
+            if pf_oof is not None
+            else np.zeros_like(final_oof, dtype=np.float64)
+        )
+        alphas = np.arange(0.60, 1.05, 0.02)
+        taus   = [None, 20.0, 40.0, 60.0, 80.0, 100.0, 150.0, 200.0, 300.0, 400.0]
+        w_pfs  = np.arange(0.0, 0.21, 0.02)
+        best_r = np.inf
+        best   = (None, None, None)
+        n_cells = 0
+        for alpha in alphas:
+            for tau in taus:
+                for w_pf in w_pfs:
+                    d = final_oof * (1.0 - w_pf) + pf_delta * w_pf
+                    if tau is not None:
+                        d = d * (1.0 - np.exp(-md_since / float(tau)))
+                    d = d * alpha
+                    r = root_mean_squared_error(y_abs, base + d)
+                    n_cells += 1
+                    if r < best_r:
+                        best_r = r
+                        best   = (float(alpha), tau, float(w_pf))
+        log.info(
+            f"PostProc 3-axis grid ({n_cells} cells):  alpha={best[0]:.2f}  "
+            f"tau={best[1]}  w_pf={best[2]:.2f}  abs TVT RMSE={best_r:.4f}"
+        )
+        return best
+
+    # legacy 2-axis (= exp009 v2 baseline) — return (alpha, tau, 0.0) for uniform 3-tuple
+    best_cfg, best_r = (None, None, 0.0), np.inf
     alphas = np.arange(0.60, 1.05, 0.05)
     taus   = [None, 30.0, 60.0, 120.0, 250.0, 500.0]
-
     for alpha in alphas:
         for tau in taus:
             d = final_oof.copy()
             if tau is not None:
-                d *= (1.0 - np.exp(-np.maximum(train_df["md_since"].values, 0.0) / tau))
+                d *= (1.0 - np.exp(-md_since / tau))
             d *= alpha
             r = root_mean_squared_error(y_abs, base + d)
             if r < best_r:
                 best_r   = r
-                best_cfg = (alpha, tau)
-
-    log.info(f"PostProc grid-search:  alpha={best_cfg[0]:.2f}  tau={best_cfg[1]}  "
-             f"abs TVT RMSE={best_r:.4f}")
+                best_cfg = (float(alpha), tau, 0.0)
+    log.info(
+        f"PostProc 2-axis grid:  alpha={best_cfg[0]:.2f}  tau={best_cfg[1]}  "
+        f"abs TVT RMSE={best_r:.4f}"
+    )
     return best_cfg
 
 
@@ -3210,10 +3475,17 @@ def apply_postproc(
     delta: np.ndarray,
     alpha: float,
     tau:   Optional[float],
+    w_pf:  float = 0.0,
+    pf_delta: Optional[np.ndarray] = None,
 ) -> np.ndarray:
-    d = delta.copy()
+    """Apply postproc (3-axis when w_pf>0 + pf_delta given, else 2-axis)."""
+    md_since = np.maximum(df["md_since"].values, 0.0)
+    if w_pf > 0.0 and pf_delta is not None:
+        d = delta * (1.0 - w_pf) + np.asarray(pf_delta, dtype=delta.dtype) * w_pf
+    else:
+        d = delta.copy()
     if tau is not None:
-        d *= (1.0 - np.exp(-np.maximum(df["md_since"].values, 0.0) / tau))
+        d = d * (1.0 - np.exp(-md_since / tau))
     return d * alpha
 
 
@@ -3406,10 +3678,26 @@ elif MODE == "train":
     log.info(f"Ridge OOF={r_ridge:.5f}  NM OOF={r_nm:.5f}  → using {'Ridge' if use_ridge else 'NM'}")
     final_oof_delta = ridge.predict(Sx_oof) if use_ridge else (Sx_oof @ np.array([nm_w[k] for k in keys]))
 
-    # ── Step 4: Post-processing grid search ─────────────────────────────
-    best_alpha, best_tau = search_postproc_params(train_df, final_oof_delta, y_arr)
-    am.save_json({"alpha": float(best_alpha), "tau": best_tau, "use_ridge": use_ridge},
-                 "postproc_params")
+    # ── Step 4: Post-processing grid search (3-tuple uniform: alpha, tau, w_pf) ──
+    # PF Z delta for w_pf blend ratio (= raunakdey07 cell-14 style, only when USE_EXHAUSTIVE_GRID)
+    if USE_EXHAUSTIVE_GRID and "pf_ancc" in train_df.columns:
+        pf_oof_for_pp = (train_df["pf_ancc"].values - train_df["last_known_tvt"].values).astype(np.float64)
+    else:
+        pf_oof_for_pp = None
+    best_alpha, best_tau, best_w_pf = search_postproc_params(
+        train_df, final_oof_delta, y_arr, pf_oof=pf_oof_for_pp
+    )
+    am.save_json(
+        {
+            "alpha": float(best_alpha),
+            "tau": best_tau,
+            "w_pf": float(best_w_pf),
+            "use_ridge": use_ridge,
+            "use_climber": bool(USE_CLIMBER),
+            "use_exhaustive_grid": bool(USE_EXHAUSTIVE_GRID),
+        },
+        "postproc_params",
+    )
 
     # ── Step 5: Final training ───────────────────────────────────────────
     models, fi_df = run_final_training(train_df, feature_cols, best_iters)
@@ -3427,8 +3715,15 @@ elif MODE == "train":
     else:
         test_delta = apply_ensemble_nm(test_preds, nm_w)
 
-    # ── Step 7: Post-processing ──────────────────────────────────────────
-    test_delta_pp = apply_postproc(test_df, test_delta, best_alpha, best_tau)
+    # ── Step 7: Post-processing (3-axis when USE_EXHAUSTIVE_GRID) ────────
+    if USE_EXHAUSTIVE_GRID and "pf_ancc" in test_df.columns:
+        pf_test_delta = (test_df["pf_ancc"].values - test_df["last_known_tvt"].values).astype(test_delta.dtype)
+    else:
+        pf_test_delta = None
+    test_delta_pp = apply_postproc(
+        test_df, test_delta, best_alpha, best_tau,
+        w_pf=best_w_pf, pf_delta=pf_test_delta,
+    )
     test_delta_sg = sg_smooth_per_well(test_df, test_delta_pp)
 
     # Spike removal: clip per-well to [p1, p99] of training delta range
