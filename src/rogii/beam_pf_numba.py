@@ -412,3 +412,210 @@ def run_pf_ancc(
         float(hp["RR"]),
         float(hp["RESAMP"]),
     )
+
+
+# ----------------------------------------------------------------------------
+# A3.1: Particle Filter Z (= GR primary + smoothed dual likelihood + Z velocity)
+# ----------------------------------------------------------------------------
+
+
+@njit(cache=True)
+def _pf_z_jit(
+    md_v: np.ndarray,
+    z_v: np.ndarray,
+    gr_v: np.ndarray,
+    gr_sm_v: np.ndarray,
+    gg_p: np.ndarray,
+    gg_s: np.ndarray,
+    vmin: float,
+    step: float,
+    gs: float,
+    ip: float,
+    iv: float,
+    beta: float,
+    icpt: float,
+    zsig: float,
+    N: int,
+    MOM: float,
+    VN: float,
+    PN: float,
+    GR_WT: float,
+    RP: float,
+    RV: float,
+    RESAMP: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Z-axis particle filter with GR primary + smoothed GR dual likelihood.
+
+    Direct port of ravaghi/wellbore-geology-prediction-hill-climbing cell-5
+    `_pf_z`. Models Z-velocity-aware TVT particle position with:
+      - momentum-driven velocity update (MOM, VN)
+      - position evolution with process noise (PN)
+      - dual GR likelihood: primary (gg_p, gs) blended with smoothed (gg_s,
+        gs*1.5) at weight GR_WT (= raunakdey07 0.3)
+      - Z-velocity drift correction (beta * dZ/dMD + icpt) with zsig variance
+      - systematic resampling when ESS < RESAMP*N
+    """
+    pos = np.empty(N)
+    vel = np.empty(N)
+    w = np.ones(N) / N
+    for j in range(N):
+        pos[j] = ip + 0.5 * np.random.randn()
+        vel[j] = iv + 0.02 * np.random.randn()
+    nm = len(md_v)
+    pts = np.empty(nm)
+    std_ = np.empty(nm)
+    pm = md_v[0] - 1.0
+    pz = z_v[0] - 1.0
+    for i in range(nm):
+        dm = max(md_v[i] - pm, 1.0)
+        dzd = (z_v[i] - pz) / dm
+        ve = beta * dzd + icpt
+        for j in range(N):
+            vel[j] = MOM * vel[j] + VN * np.random.randn()
+            pos[j] += vel[j] * dm + PN * np.random.randn()
+            pos[j] = max(pos[j], vmin - 50.0)
+            pos[j] = min(pos[j], vmin + len(gg_p) * step + 50.0)
+        if not np.isnan(gr_v[i]):
+            ws = 0.0
+            for j in range(N):
+                ep = _interp1(gg_p, pos[j], vmin, step)
+                dp = (gr_v[i] - ep) / gs
+                lp = max(np.exp(-0.5 * dp * dp) if dp * dp < 600.0 else 0.0, 1e-300)
+                if not np.isnan(gr_sm_v[i]):
+                    es = _interp1(gg_s, pos[j], vmin, step)
+                    ds = (gr_sm_v[i] - es) / (gs * 1.5)
+                    ls = max(np.exp(-0.5 * ds * ds) if ds * ds < 600.0 else 0.0, 1e-300)
+                    lk = (1.0 - GR_WT) * lp + GR_WT * ls
+                else:
+                    lk = lp
+                lk = max(lk, 1e-300)
+                w[j] *= lk
+                ws += w[j]
+            if ws > 0.0:
+                for j in range(N):
+                    w[j] /= ws
+            else:
+                for j in range(N):
+                    w[j] = 1.0 / N
+        # Z-velocity correction likelihood
+        ws2 = 0.0
+        for j in range(N):
+            dv = (vel[j] - ve) / max(zsig * 2.0, 0.005)
+            lz = max(np.exp(-0.5 * dv * dv) if dv * dv < 600.0 else 0.0, 1e-300)
+            w[j] *= lz
+            ws2 += w[j]
+        if ws2 > 0.0:
+            for j in range(N):
+                w[j] /= ws2
+        else:
+            for j in range(N):
+                w[j] = 1.0 / N
+        # Resample
+        ne = 0.0
+        for j in range(N):
+            ne += w[j] * w[j]
+        if 1.0 / ne < RESAMP * N:
+            pos, vel = _resamp(pos, vel, w, N, RP, RV)
+            for j in range(N):
+                w[j] = 1.0 / N
+        wm = 0.0
+        for j in range(N):
+            wm += w[j] * pos[j]
+        pts[i] = wm
+        va = 0.0
+        for j in range(N):
+            va += w[j] * (pos[j] - wm) ** 2
+        std_[i] = va**0.5
+        pm = md_v[i]
+        pz = z_v[i]
+    return pts, std_
+
+
+# Default PF Z hyperparams (= Hill Climb cell 5)
+PF_Z_DEFAULTS = dict(
+    N=600,
+    MOM=0.993,
+    VN=0.005,
+    PN=0.01,
+    GR_WT=0.3,
+    RP=0.2,
+    RV=0.003,
+    RESAMP=0.5,
+)
+
+
+def _grid_uniform(tvt_axis: np.ndarray, gr_axis: np.ndarray, step: float = 0.2) -> tuple[np.ndarray, float, float]:
+    """Build uniform-step grid for O(1) typewell lookup.
+
+    Returns (gr_on_grid, tvt_min, step) where gr_on_grid is interpolated GR at
+    uniformly-spaced TVT positions.
+    """
+    tmin = float(tvt_axis.min())
+    tmax = float(tvt_axis.max())
+    tvt_g = np.arange(tmin, tmax + step, step)
+    gr_g = np.interp(tvt_g, tvt_axis, gr_axis).astype(np.float64)
+    return gr_g, tmin, step
+
+
+def run_pf_z(
+    md_v: np.ndarray,
+    z_v: np.ndarray,
+    gr_v: np.ndarray,
+    gr_sm_v: np.ndarray,
+    tw_tvt: np.ndarray,
+    tw_gr: np.ndarray,
+    tw_gr_smoothed: np.ndarray,
+    gs: float,
+    init_pos: float,
+    init_v: float,
+    beta: float = -1.0,
+    icpt: float = 0.0,
+    zsig: float = 0.1,
+    grid_step: float = 0.2,
+    **overrides,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Public wrapper for Z-axis PF.
+
+    Args:
+        md_v: hidden-region MD values, shape (n,)
+        z_v: hidden-region Z values, shape (n,)
+        gr_v: hidden-region GR raw, shape (n,)
+        gr_sm_v: hidden-region GR smoothed (= rolling mean win=5), shape (n,)
+        tw_tvt: typewell TVT axis, shape (nt,)
+        tw_gr: typewell GR raw, shape (nt,)
+        tw_gr_smoothed: typewell GR smoothed, shape (nt,)
+        gs: GR sigma scale (= local fit residual std clipped [10, 60])
+        init_pos: initial particle position (= last_known_TVT)
+        init_v: initial particle velocity (= median dTVT/dMD over recent 20)
+        beta / icpt / zsig: Z-velocity drift model parameters (= linreg coef +
+            residual std fit on visible region)
+        grid_step: uniform grid step for O(1) lookup
+    """
+    hp = {**PF_Z_DEFAULTS, **overrides}
+    gg_p, vmin_p, step_p = _grid_uniform(tw_tvt, tw_gr, step=grid_step)
+    gg_s, _vmin_s, _step_s = _grid_uniform(tw_tvt, tw_gr_smoothed, step=grid_step)
+    pts, std_ = _pf_z_jit(
+        np.asarray(md_v, np.float64),
+        np.asarray(z_v, np.float64),
+        np.asarray(gr_v, np.float64),
+        np.asarray(gr_sm_v, np.float64),
+        gg_p,
+        gg_s,
+        float(vmin_p),
+        float(step_p),
+        float(gs),
+        float(init_pos),
+        float(init_v),
+        float(beta),
+        float(icpt),
+        float(zsig),
+        int(hp["N"]),
+        float(hp["MOM"]),
+        float(hp["VN"]),
+        float(hp["PN"]),
+        float(hp["GR_WT"]),
+        float(hp["RP"]),
+        float(hp["RV"]),
+        float(hp["RESAMP"]),
+    )
+    return pts.astype(np.float32), std_.astype(np.float32)
