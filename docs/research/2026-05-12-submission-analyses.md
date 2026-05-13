@@ -200,6 +200,44 @@ submit 完了後、 `kaggle competitions submissions rogii-wellbore-geology-pred
 
 ---
 
+## §14 v_9 → v_11 分解 (= exp017 hillclimb fork v3、 LB **10.030**、 想定外 大破綻)
+
+### submission_id: 52586245
+- **timestamp (UTC)**: 2026-05-12 16:14:18
+- **build_commit**: (= fork、 ravaghi/wellbore-geology-prediction-hill-climbing + 我々 inline Climber)
+- **mode**: ravaghi NB を fork、 PyPI `hill-climbing` を **我々 src/rogii/hill_climb.py inline** に置換、 CPU mode で run
+- **base submission**: 52534803 (= exp009 v2、 LB 9.738)
+- **source_count**: 1 (= fork 全体を 1 unit、 PyPI Climber → inline Climber 置換のみ)
+- **force_count**: 0
+- **est_total_score (OOF)**: 10.380 (= Optuna Trial 448 best、 `alpha=1.0, tau=75, w_pf=0.12`)
+- **public_score (LB)**: **10.030**
+- **lb_minus_est**: -0.350 (= LB が OOF より 0.35 ft 良い、 ただし通常逆転)
+- **lb_div_est**: 0.966
+- **per-task source diff**:
+  - PyPI Climber → inline Climber: numerical 等価性確認なし (= 後段でも未検証)
+  - CPU mode (= GPU quota 切れ): LGB/CB は cache load 経路、 ravaghi original の cache 利用、 ただし PF (Numba) は **再 run** で seed 効かない non-determinism risk
+  - `from numba import njit` 内 multi-thread = seed 固定でも結果ばらつき
+- **effect isolate**: **OOF 10.380 (= 我々 inline Climber + Optuna) は ravaghi original の OOF 10.394 より 0.014 ft good**。 にもかかわらず LB **10.030 vs 期待 9.43 = -0.60 ft 悪化**。 OOF と LB の **decoupling**
+- **仮説帰納**:
+  - H1 (= 確度 大): **PF / Numba parallelism non-determinism** が test set で異なる結果を生み、 LB drift
+  - H2 (= 確度 中): **CPU mode LGB の floating-point precision** が GPU mode と differ、 model output micro-diff が Climber blend で amplified
+  - H3 (= 確度 小): **我々 inline Climber に hidden bug** (= ただし OOF で good 出ているので、 OOF-LB decoupling が真因の可能性大)
+  - H4 (= 構造的): **OOF (= train 770 wells hidden rows) と LB (= test 3 wells hidden rows) は完全に異なる集団**、 ravaghi LB 9.43 は **test 3 wells に偶然 lucky な** kernel run で取れた値の可能性
+- **roadmap refine**:
+  - **exp016 (= 自前統合、 RUNNING) は ravaghi NB と別 base (= 我々 9-base + Sparse GP + Edge Q/R/S/O) なので、 同 LB drift には直接さらされない、 ただし PF Z dual の Numba non-determinism は同じ risk**
+  - exp016 完走後の LB を観察、 **CV-LB gap (= AC-A-cv-lb-spearman) を critical 検査** する
+  - 将来: **public NB fork は確実 defense ラインでない、 自前構成の方が CV-LB stable** という教訓
+- **shake-up risk 評価**: exp017 で OOF 10.380 → LB 10.030 = **gap +0.35 ft (= 通常 -0.5 ft 程度なので異常に小)、 test set の hidden 真値が train 分布と異なる可能性、 shake-up risk 大**
+
+### 教訓 (= GM §11 「優勝本質性」 commit、 lessons.md 候補)
+
+1. **公開 NB fork ≠ LB 確保**: ravaghi NB LB 9.43 は author の original run、 我々 fork で **PF non-determinism / CPU mode / library version 等の差** で LB drift 可能性大、 fork で 9.4 帯を「確実 defense ライン」 と読み込んだのは過信
+2. **OOF と LB の decoupling 検証必須**: OOF 改善が LB 改善に reflect されない、 = CV strategy が test set を represent していない指標、 Phase B B3 (= CV-LB correlation 強化) 必須
+3. **inline 化時の numerical 等価性 test 必要**: 我々 inline Climber が PyPI と数値等価か **直接 unit test で確認**、 これを skip した我々の test 不足
+4. **PF Z dual + Numba JIT の seed 固定 verification 必要**: 多 thread での re-run で seed 効かない可能性、 deterministic 化を確認
+
+---
+
 ## 関連 doc
 
 - plan: /home/yusuke_kaya/.claude/plans/floating-cuddling-haven.md (+ repo copy: docs/dev/2026-05-12-plan-gold-to-winning.dense.md)
