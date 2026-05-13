@@ -264,11 +264,31 @@ submit 完了後、 `kaggle competitions submissions rogii-wellbore-geology-pred
   - 真の defense ライン = ours exp009 v2 LB **9.738** (= SCORED 確実、 維持)
 - **shake-up risk 評価**: 異常 LB 762 = scoring engine の penalty signal、 private LB は 別 process で評価想定、 通常通り private で 9.7-9.8 帯と推定
 
+### 真因再分析 (= 2026-05-13 user 指摘「ペナルティとかないだろ」 で fraud detection 仮説撤回)
+
+**真因確定 = ROGII Code Competition の dynamic hidden test rerun**:
+
+ROGII は Code Competition (= Kernel-Only Comp)。 submission 工程:
+1. **手動 commit run** (= 我々が直接 see): public test (= 14151 rows、 sample_submission 内 ids) に対し kernel 内 predict、 output submission.csv
+2. **submit 用 server-side rerun** (= scoring 専用): Kaggle server が同 kernel を **異なる test set (= hidden test、 host 内部のみ知る別 rows)** に対し再実行、 ここで生成された submission.csv で scoring engine が RMSE 計算
+
+我々 exp019 v5 (= pass-through) は:
+- 手動 run: Colab dataset から public test prediction を読み込み、 そのまま output
+- submit rerun: 同 logic を hidden test 上で実行 → **public test prediction を hidden test ids に対し apply** → hidden test 真値と完全 unrelated → RMSE 762
+
+過去 SCORED kernel (= exp009 v2 LB 9.738、 exp010 LB 10.227、 exp017 v3 LB 10.030) は全部 **kernel 内で test directory を動的 read + predict** logic、 hidden test に対し正しく predict → scoring 正常。
+
 ### 教訓 (= lessons.md 候補)
 
-1. **Code Competition で「外部 compute → Kaggle dataset upload → pass-through kernel submit」 path は fraud detection penalty risk**: ravaghi original (LB 9.43) は同 NB を Kaggle 上で run → 直接 submit、 我々 fork が **同 file を Colab で生成 → upload → pass-through** で penalty 762
-2. **byte-identical file 重複 submit は scoring engine が異常値 return**: v4 (= empty score) と v5 (= 762) は同 file、 v5 は merge wrapping で byte 違うが内容同一 → penalty 残存
-3. **defense ライン = ours exp009 v2 (= SCORED 確実)**、 公開 NB fork ではない: 公開 NB は **本人 Kaggle GPU run のみ** scoring 正常、 fork は無効化される構造
+1. **Code Competition では kernel が submit 用 rerun 時に hidden test に対し inference 必要**: 「Colab で predict → dataset upload → pass-through kernel submit」 path は **構造的に不可** (= hidden test に対応できない)。 これは「fraud detection penalty」 でなく、 **「kernel が hidden test set で本当に inference を実行しているか」 の構造的要件**
+2. **kernel re-run の test directory が public 用と submit 用で **動的に入れ替わる**ことを知らずに静的 file pass-through した我々の構造誤解**
+3. **defense ライン = ours exp009 v2 (= 自前 LGB+CB ensemble、 kernel 内 dynamic inference 実装、 SCORED 確実) で固定**、 公開 NB fork は **本人 Kaggle GPU run のみ scoring 正常**。 GPU quota reset (= weekly) 待ち、 もしくは self-implemented kernel を full GPU run
+
+### 戦略 path 修正 (= 真因確定後)
+
+- ❌ Track 2 公開 NB fork defense: 完全 abandon (= 構造的に不可)
+- ✅ **Track 1.2 exp020 (= 自前 LGB+CB + M1+N1+M3+M2 inject) を Colab GPU で full run + submit**: kernel 内で test directory 動的 read + train + predict、 hidden test に正しく対応 = scoring 正常
+- 真の defense = ours exp009 v2 LB **9.738** 維持、 攻めは Phase A.5 + Magic 全 inject で LB **9.0-9.3 帯到達**
 
 ---
 
