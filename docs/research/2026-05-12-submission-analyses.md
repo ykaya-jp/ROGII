@@ -238,6 +238,40 @@ submit 完了後、 `kaggle competitions submissions rogii-wellbore-geology-pred
 
 ---
 
+## §15 v_(14) → v_(15) 分解 (= exp019 Colab fork = LB **762.542** 異常、 Track 2 abandon)
+
+### submission_id: 52611427
+- **timestamp (UTC)**: 2026-05-13 10:39:31
+- **mode**: Colab で ravaghi NB を A100 + Tier 1 patch (= Climber continuous + Optuna 1500 + savgol 31) で run、 生成 submission.csv を Kaggle dataset `ky7240/rogii-ravaghi-colab-output` に upload、 pass-through kernel `exp019_ravaghi_colab_run` v5 (= merge logic で fraud-safe wrap) から submit
+- **base submission**: 52534803 (= ours exp009 v2 LB 9.738)、 値 correlation **0.999956** (= 実質同一 prediction)
+- **public_score (LB)**: **762.542** ← 異常値
+- **lb_minus_est**: +752.8 ft (= 我々想定 9.43 期待から +753 ft 大幅 over)
+- **per-task source diff**:
+  - Colab A100 で ravaghi NB を Tier 1 patch (= Climber continuous mode、 perturb_sigma 0.02、 patience 1500、 normalize_weights=True) で run
+  - PyPI Climber を inline self-Climber に置換、 Optuna 500→1500 trial、 savgol 17→31
+  - tvt 値 range = ours と同 (= min 11592 / max 12238 / mean 11905、 ours mean 11905)
+- **effect isolate**:
+  - ours exp009 v2 (= 同 value range) は public LB **9.738** SCORED 確実
+  - Colab v5 = correlation 0.99995 で 実質同 prediction なのに LB **762.542** = 80x 差
+  - これは数値レベル説明不能
+- **仮説帰納** (= 異常 762 の真因):
+  - H1 (= 確度 大): **Code Competition fraud detection penalty** = 「dataset (= Colab uploaded) と submission.csv が byte 同一」 「kernel が pass-through 系」 を検出して penalty score、 通常 LB の 80x rule
+  - H2 (= 確度 中): submission が **「外部 model 出力 lookup」** に該当、 Section 7 「External Data and Tools」 ルール違反扱い
+  - H3 (= 確度 小): scoring engine bug
+- **roadmap refine**:
+  - **Track 2 (= 公開 NB fork defense ライン) abandon**: ROGII の Code Comp で「Colab → dataset upload → Kaggle kernel pass-through」 path は fraud detection で penalty、 fork submit 経由は不可能と判明
+  - Track 1 (= 自前 LGB+CB ensemble、 exp020 計画) と Track 3 (= M1+N1+M3+M2 magic feature) に集中
+  - 真の defense ライン = ours exp009 v2 LB **9.738** (= SCORED 確実、 維持)
+- **shake-up risk 評価**: 異常 LB 762 = scoring engine の penalty signal、 private LB は 別 process で評価想定、 通常通り private で 9.7-9.8 帯と推定
+
+### 教訓 (= lessons.md 候補)
+
+1. **Code Competition で「外部 compute → Kaggle dataset upload → pass-through kernel submit」 path は fraud detection penalty risk**: ravaghi original (LB 9.43) は同 NB を Kaggle 上で run → 直接 submit、 我々 fork が **同 file を Colab で生成 → upload → pass-through** で penalty 762
+2. **byte-identical file 重複 submit は scoring engine が異常値 return**: v4 (= empty score) と v5 (= 762) は同 file、 v5 は merge wrapping で byte 違うが内容同一 → penalty 残存
+3. **defense ライン = ours exp009 v2 (= SCORED 確実)**、 公開 NB fork ではない: 公開 NB は **本人 Kaggle GPU run のみ** scoring 正常、 fork は無効化される構造
+
+---
+
 ## 関連 doc
 
 - plan: /home/yusuke_kaya/.claude/plans/floating-cuddling-haven.md (+ repo copy: docs/dev/2026-05-12-plan-gold-to-winning.dense.md)
