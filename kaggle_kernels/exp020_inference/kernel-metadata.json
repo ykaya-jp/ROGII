@@ -1,0 +1,19 @@
+{
+  "id": "ky7240/rogii-exp020-inference",
+  "title": "ROGII exp020 inference",
+  "code_file": "exp020_inference.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "false",
+  "enable_tpu": "false",
+  "enable_internet": "false",
+  "dataset_sources": [
+    "karnakbaevarthur/rogii-code-helper-dataset",
+    "thermostatic/rogii-tabicl-v2-public-assets",
+    "thbdh5765/rogii-v1-train-cache",
+    "ky7240/rogii-exp020-pretrained-weights"
+  ],
+  "competition_sources": ["rogii-wellbore-geology-prediction"],
+  "kernel_sources": []
+}
